@@ -1,0 +1,37 @@
+
+version: '3.8'
+
+services:
+  shopifyq-app:
+    container_name: backend
+    image: logeshloki585/shopifyq:v1
+    ports:
+      - "3001:3000"
+    environment:
+      - FIREBASE_API_KEY=AIzaSyB_cR12fO4TPGPOFk88ZYQQlgxGoY2Ih4w
+      - FIREBASE_AUTH_DOMAIN=bookmyshow-c8176.firebaseapp.com
+      - FIREBASE_PROJECT_ID=bookmyshow-c8176
+      - FIREBASE_STORAGE_BUCKET=bookmyshow-c8176.firebasestorage.app
+      - FIREBASE_MESSAGING_SENDER_ID=147565784614
+      - FIREBASE_APP_ID=1:147565784614:web:1f09dface52d8be34400e7
+      - FIREBASE_MEASUREMENT_ID= G-9WNK56SW5J
+      - PORT=3000
+    restart: unless-stopped
+    volumes:
+      # For development/debugging purposes - uncomment if needed
+      # - ./api:/app/api
+      # - ./src/api:/app/src/api
+      - ./logs:/app/logs
+    networks:
+      - shopifyq-network
+    # Uncomment if you need healthcheck
+    # healthcheck:
+    #   test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 10s
+
+networks:
+  shopifyq-network:
+    driver: bridge

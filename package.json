@@ -1,0 +1,28 @@
+{
+  "name": "webhook-stripe",
+  "version": "1.0.0",
+  "description": "Express REST API with Stripe webhook handler",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.50.1",
+    "body-parser": "^2.2.0",
+    "cookie": "^1.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "micro": "^10.0.1",
+    "raw-body": "^2.5.2",
+    "stripe": "^14.25.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.2"
+  }
+}
