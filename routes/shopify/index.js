@@ -1,13 +1,9 @@
 import express from 'express';
 import getAllProducts, { createProduct, deleteProduct, getProductID, getProducts, updateProductID } from '../../controllers/shopify/productController.js';
 import { getShopInfo } from '../../controllers/shopify/shopInfoController.js';
-import {
-    getProductImages,
-    getProductImage,
-    createProductImage,
-    updateProductImage,
-    deleteProductImage,
-  } from "../../controllers/shopify/imageController.js";
+
+import { createImage, deleteImage, getAllImages, getImageID, getImages, updateImageID } from '../../controllers/shopify/imageController.js';
+
 
 
 const router = express.Router();
@@ -22,14 +18,13 @@ router.post('/deleteProduct',deleteProduct)
 
 
 
-router.post("/shopify/images", getProductImages);   // list
-router.get("/shopify/images", getProductImages);    // list
-router.post("/shopify/image", getProductImage);     // single
-router.get("/shopify/image", getProductImage);      // single
-router.post("/shopify/image/create", createProductImage);
-router.post("/shopify/image/update", updateProductImage);
-router.put("/shopify/image/update", updateProductImage);
-router.delete("/shopify/image/delete", deleteProductImage);
-router.post("/shopify/image/delete", deleteProductImage);
+// routes/shopifyImageRoutes.js (or inside your main router)
+router.post("/images/list", getImages);       // List multiple images (paginated)
+router.post("/images/all", getAllImages);     // List ALL images (with pagination loop)
+router.post("/image/get", getImageID);          // Get single image by ID
+router.post("/image/create", createImage);    // Create new image
+router.post("/image/update", updateImageID);    // Update image (alt, position, etc.)
+router.post("/image/delete", deleteImage);    // Delete image by ID
+
 
 export default router;

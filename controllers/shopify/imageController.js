@@ -1,187 +1,230 @@
-
 const API_VERSION = "2025-07";
 
-const jsonHeaders = (token) => ({
-  "X-Shopify-Access-Token": token,
-  "Content-Type": "application/json",
-  Accept: "application/json",
-});
-
-async function getProductImages(req, res) {
-  if (!allow(req, res, ["GET", "POST"])) return;
-  const { shop, accessToken, productId } =
-    req.method === "GET" ? req.query : req.body;
-
-  if (!shop || !accessToken || !productId) {
-    return res.status(400).json({ error: "Missing shop, accessToken or productId" });
-  }
-
-  const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images.json`;
-
-  try {
-    const r = await fetch(url, { headers: jsonHeaders(accessToken) });
-    const data = await r.json();
-    return r.ok ? res.status(200).json(data) : res.status(r.status).json({ error: data });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+function dataUrlToAttachment(src) {
+  return src.startsWith("data:") ? src.split(",")[1] : src;
 }
 
-async function getProductImage(req, res) {
-  if (!allow(req, res, ["GET", "POST"])) return;
-  const { shop, accessToken, productId, imageId } =
-    req.method === "GET" ? req.query : req.body;
+export const getImages = async (req, res) => {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
 
-  if (!shop || !accessToken || !productId || !imageId) {
+  const { shop, accessToken, productId, limit = 5 } = req.body || {};
+  if (!shop || !accessToken || !productId) {
     return res
       .status(400)
-      .json({ error: "Missing shop, accessToken, productId or imageId" });
+      .json({ error: "Missing shop, accessToken or productId" });
   }
-
-  const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images/${imageId}.json`;
 
   try {
-    const r = await fetch(url, { headers: jsonHeaders(accessToken) });
-    const data = await r.json();
-    return r.ok ? res.status(200).json(data) : res.status(r.status).json({ error: data });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-}
-
-async function createProductImage(req, res) {
-  if (!allow(req, res, ["POST"])) return;
-
-  const {
-    shop,
-    accessToken,
-    productId,
-    src,
-    attachment: rawAttachment,
-    alt,
-    position,
-    variant_ids,
-  } = req.body || {};
-
-  if (!shop || !accessToken || !productId) {
-    return res.status(400).json({ error: "Missing shop, accessToken or productId" });
-  }
-  if (!src && !rawAttachment) {
-    return res.status(400).json({ error: "Provide either src or attachment" });
-  }
-
- 
-  let attachment = rawAttachment;
-  if (attachment) {
-    const b64 = attachment.replace(/^data:image\/\w+;base64,/, "");
-    const sizeInBytes = (b64.length * 3) / 4; // rough
-    const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
-    if (sizeInBytes > MAX_SIZE) {
-      return res.status(413).json({ error: "Attachment exceeds 20 MB limit" });
-    }
-    attachment = b64;
-  }
-
-  const image = { src, attachment, alt, position, variant_ids };
-  Object.keys(image).forEach((k) => image[k] === undefined && delete image[k]);
-
-  const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images.json`;
-
-  try {
+    const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images.json?limit=${limit}`;
     const r = await fetch(url, {
-      method: "POST",
-      headers: jsonHeaders(accessToken),
-      body: JSON.stringify({ image }),
+      headers: {
+        "X-Shopify-Access-Token": accessToken,
+        "Content-Type": "application/json",
+      },
     });
+    if (!r.ok) throw new Error(await r.text());
     const data = await r.json();
-    return r.ok ? res.status(200).json(data) : res.status(r.status).json({ error: data });
+    return res.status(200).json(data); // { images: [...] }
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error(err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Failed to fetch images" });
+  }
+};
+
+export async function getAllImages(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+
+  const { shop, accessToken, productId } = req.body || {};
+  if (!shop || !accessToken || !productId) {
+    return res
+      .status(400)
+      .json({ error: "Missing shop, accessToken or productId" });
+  }
+
+  try {
+    const limit = 250;
+    let sinceId = null;
+    const allImages = [];
+
+    while (true) {
+      const url =
+        `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images.json` +
+        `?limit=${limit}` +
+        (sinceId ? `&since_id=${sinceId}` : "");
+
+      const r = await fetch(url, {
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!r.ok) throw new Error(await r.text());
+
+      const { images = [] } = await r.json();
+      if (images.length === 0) break;
+
+      allImages.push(...images);
+      sinceId = images[images.length - 1].id;
+      if (images.length < limit) break;
+    }
+
+    return res.status(200).json({ images: allImages, count: allImages.length });
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Failed to fetch images" });
   }
 }
 
-async function updateProductImage(req, res) {
-  if (!allow(req, res, ["POST", "PUT"])) return;
 
-  const {
-    shop,
-    accessToken,
-    productId,
-    imageId,
-    src,
-    attachment: rawAttachment,
-    alt,
-    position,
-    variant_ids,
-  } = req.body || {};
+export async function getImageID(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
 
+  const { shop, accessToken, productId, imageId } = req.body || {};
   if (!shop || !accessToken || !productId || !imageId) {
-    return res
-      .status(400)
-      .json({ error: "Missing shop, accessToken, productId or imageId" });
+    return res.status(400).json({
+      error:
+        "Missing required parameters (shop, accessToken, productId, imageId)",
+    });
   }
-
-  let attachment = rawAttachment;
-  if (attachment) {
-    attachment = attachment.replace(/^data:image\/\w+;base64,/, "");
-  }
-
-  const image = { id: imageId, src, attachment, alt, position, variant_ids };
-  Object.keys(image).forEach((k) => image[k] === undefined && delete image[k]);
-
-  const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images/${imageId}.json`;
 
   try {
+    const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images/${imageId}.json`;
+    const r = await fetch(url, {
+      headers: {
+        "X-Shopify-Access-Token": accessToken,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    return res.status(200).json(data); // { image: {...} }
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Unexpected server error" });
+  }
+}
+
+export async function updateImageID(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+
+  const { shop, accessToken, productId, imageId, imageData } = req.body || {};
+  if (!shop || !accessToken || !productId || !imageId || !imageData) {
+    return res.status(400).json({ error: "Missing required parameters" });
+  }
+
+  // normalise potential data:url into attachment
+  const patched = { ...imageData };
+  if (patched.src && patched.src.startsWith("data:")) {
+    patched.attachment = dataUrlToAttachment(patched.src);
+    delete patched.src;
+  }
+
+  try {
+    const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images/${imageId}.json`;
     const r = await fetch(url, {
       method: "PUT",
-      headers: jsonHeaders(accessToken),
-      body: JSON.stringify({ image }),
+      headers: {
+        "X-Shopify-Access-Token": accessToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ image: { id: imageId, ...patched } }),
     });
+    if (!r.ok) throw new Error(await r.text());
     const data = await r.json();
-    return r.ok ? res.status(200).json(data) : res.status(r.status).json({ error: data });
+    return res.status(200).json(data); // { image: {...} }
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error(err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Unexpected server error" });
   }
 }
 
-async function deleteProductImage(req, res) {
-  if (!allow(req, res, ["DELETE", "POST"])) return;
+export async function createImage(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+
+  const { shop, accessToken, productId, imageData } = req.body || {};
+  if (!shop || !accessToken || !productId || !imageData) {
+    return res.status(400).json({ error: "Missing required parameters" });
+  }
+
+  const patched = { ...imageData };
+  if (patched.src && patched.src.startsWith("data:")) {
+    patched.attachment = dataUrlToAttachment(patched.src);
+    delete patched.src;
+  }
+
+  try {
+    const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images.json`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-Shopify-Access-Token": accessToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ image: patched }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    return res.status(200).json(data); // { image: {...} }
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Unexpected server error" });
+  }
+}
+
+export async function deleteImage(req, res) {
+  if (req.method !== "DELETE" && req.method !== "POST") {
+    res.setHeader("Allow", ["DELETE", "POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+
   const { shop, accessToken, productId, imageId } =
     req.method === "DELETE" ? req.query : req.body;
-
   if (!shop || !accessToken || !productId || !imageId) {
     return res
       .status(400)
       .json({ error: "Missing shop, accessToken, productId or imageId" });
   }
 
-  const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images/${imageId}.json`;
-
   try {
-    const r = await fetch(url, { method: "DELETE", headers: jsonHeaders(accessToken) });
-    if (r.ok) return res.status(200).json({ success: true });
-    const detail = await r.text();
-    return res.status(r.status).json({ error: detail || "Failed to delete image" });
+    const url = `https://${shop}/admin/api/${API_VERSION}/products/${productId}/images/${imageId}.json`;
+    const r = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "X-Shopify-Access-Token": accessToken,
+        "Content-Type": "application/json",
+      },
+    });
+    if (r.status === 200) return res.status(200).json({ success: true });
+    throw new Error(await r.text());
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error(err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Unexpected server error" });
   }
 }
-
-
-function allow(req, res, methods) {
-  if (!methods.includes(req.method)) {
-    res.setHeader("Allow", methods);
-    res.status(405).json({ error: `Method ${req.method} Not Allowed` });
-    return false;
-  }
-  return true;
-}
-
-
-export {
-  getProductImages,
-  getProductImage,
-  createProductImage,
-  updateProductImage,
-  deleteProductImage,
-};
