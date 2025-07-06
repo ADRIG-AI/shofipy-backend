@@ -49,7 +49,7 @@ const port = process.env.PORT || 3000;
 
 // CORS setup
 const corsOptions = {
-  origin: 'https://shopify-frontend-pearl.vercel.app/', // change to your frontend URL
+  origin: 'http://localhost:8080'|| 'https://shopify-frontend-pearl.vercel.app/', // change to your frontend URL
   credentials: true,
 };
 app.use(cors(corsOptions));
