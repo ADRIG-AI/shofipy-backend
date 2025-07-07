@@ -14,8 +14,8 @@ export const tokenController = async (req, res) => {
             return res.status(400).json({ error: 'Missing required parameters' });
         }
 
-        const apiKey = process.env.VITE_SHOPIFY_API_KEY;
-        const apiSecret = process.env.VITE_SHOPIFY_API_SECRET;
+        const apiKey = process.env.SHOPIFY_API_KEY;
+        const apiSecret = process.env.SHOPIFY_API_SECRET;
 
         if (!apiKey || !apiSecret) {
             console.error('Missing environment variables: SHOPIFY_API_KEY or VITE_SHOPIFY_API_SECRET');
