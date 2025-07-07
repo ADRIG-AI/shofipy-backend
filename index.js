@@ -50,7 +50,8 @@ const port = process.env.PORT || 3000;
 const corsOptions = {
   origin: [
     'http://localhost:8080',
-    'https://shopify-frontend-pearl.vercel.app'
+    'https://shopify-frontend-pearl.vercel.app',
+    'shopify-frontend-rouge.vercel.app'
   ],
   credentials: true,
 };
