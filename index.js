@@ -51,7 +51,7 @@ const corsOptions = {
   origin: [
     'http://localhost:8080',
     'https://shopify-frontend-pearl.vercel.app',
-    'shopify-frontend-rouge.vercel.app'
+    'https://shopify-frontend-rouge.vercel.app'
   ],
   credentials: true,
 };
