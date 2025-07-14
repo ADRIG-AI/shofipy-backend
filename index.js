@@ -65,6 +65,8 @@ app.get('/auth/callback', callbackController);
 
 app.use('/api', apiRoutes);
 
+
+
 app.get('/', (req, res) => {
   res.json({ status: 'Stripe webhook server is running!' });
 });

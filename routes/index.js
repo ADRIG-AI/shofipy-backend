@@ -3,6 +3,8 @@ import authRoutes from './auth/index.js';
 import shopifyRoutes from './shopify/index.js';
 import stripeRoutes from './stripe/index.js';
 import userRoutes from './user/index.js';
+import dutifyRoutes from './dutify/index.js';
+
 
 const router = express.Router();
 
@@ -17,5 +19,7 @@ router.use('/stripe', stripeRoutes);
 
 // Mount user routes
 router.use('/user', userRoutes);
+
+router.use('/dutify', dutifyRoutes);
 
 export default router;

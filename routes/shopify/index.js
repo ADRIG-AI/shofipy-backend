@@ -1,9 +1,9 @@
 import express from 'express';
-import getAllProducts, { createProduct, deleteProduct, getProductID, getProducts, updateProductID } from '../../controllers/shopify/productController.js';
+import getAllProducts, { createProduct, deleteProduct, getProductID, getProducts, updateProductID, updateProductMetadata } from '../../controllers/shopify/productController.js';
 import { getShopInfo } from '../../controllers/shopify/shopInfoController.js';
-
 import { createImage, deleteImage, getAllImages, getImageID, getImages, updateImageID } from '../../controllers/shopify/imageController.js';
-
+import { getPendingReviewCount, getAutoClassifiedCount, getManualOverridesCount } from '../../controllers/shopify/hs_codeController.js';
+import { getLandedCostHistory, getLandedCostStats, saveLandedCostCalculation } from '../../controllers/shopify/landedCostController.js';
 
 
 const router = express.Router();
@@ -16,15 +16,27 @@ router.post('/updateProductID', updateProductID)
 router.post('/createProduct',createProduct)
 router.post('/deleteProduct',deleteProduct)
 
+router.post('/products/metadata', updateProductMetadata)
 
 
-// routes/shopifyImageRoutes.js (or inside your main router)
-router.post("/images/list", getImages);       // List multiple images (paginated)
-router.post("/images/all", getAllImages);     // List ALL images (with pagination loop)
-router.post("/image/get", getImageID);          // Get single image by ID
-router.post("/image/create", createImage);    // Create new image
-router.post("/image/update", updateImageID);    // Update image (alt, position, etc.)
-router.post("/image/delete", deleteImage);    // Delete image by ID
 
+router.post("/images/list", getImages);       
+router.post("/images/all", getAllImages);     
+router.post("/image/get", getImageID);        
+router.post("/image/create", createImage);    
+router.post("/image/update", updateImageID);  
+router.post("/image/delete", deleteImage);    
+
+
+
+
+router.post('/PendingReview', getPendingReviewCount)
+router.post('/AutoClassified', getAutoClassifiedCount)
+router.post('/ManualOverrides', getManualOverridesCount)
+
+
+router.post('/landed-cost/save', saveLandedCostCalculation);
+router.post('/landed-cost/history', getLandedCostHistory);
+router.post('/landed-cost/stats', getLandedCostStats);
 
 export default router;
