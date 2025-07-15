@@ -30,63 +30,6 @@ export const getProducts = async (req, res) => {
     }
 };
 
-
-// export default async function getAllProducts(req, res) {
-    
-//     if (req.method !== 'POST') {
-//       res.setHeader('Allow', ['POST']);
-//       return res.status(405).end(`Method ${req.method} Not Allowed`);
-//     }
-  
-    
-//     const { shop, accessToken } = req.body || {};
-//     if (!shop || !accessToken) {
-//       return res.status(400).json({ error: 'Missing shop or access token' });
-//     }
-  
-//     try {
-//       const limit = 250;   
-//       let sinceId = null;  
-//       const allProducts = [];
-  
-//       while (true) {
-//         let url = `https://${shop}/admin/api/2025-07/products.json?limit=${limit}`;
-//         if (sinceId) url += `&since_id=${sinceId}`;
-  
-//         const response = await fetch(url, {
-//           headers: {
-//             'X-Shopify-Access-Token': accessToken,
-//             'Content-Type': 'application/json',
-//           },
-//         });
-  
-//         if (!response.ok) {
-//           const errorData = await response.text();
-//           console.error('Failed to fetch products from Shopify:', errorData);
-//           throw new Error('Failed to fetch products from Shopify');
-//         }
-  
-//         const { products = [] } = await response.json();
-  
-//         if (products.length === 0) break;
-//         allProducts.push(...products);
-//         sinceId = products[products.length - 1].id; 
-  
-//         if (products.length < limit) break;       
-//       }
-  
-//       // 4. Success
-//       return res.status(200).json({
-//         products: allProducts,
-//         count: allProducts.length,
-//       });
-//     } catch (error) {
-//       console.error(error);
-//       return res.status(500).json({
-//         error: error.message || 'Failed to fetch products',
-//       });
-//     }
-//   }
   
   export default async function getAllProducts(req, res) {
     if (req.method !== 'POST') {
@@ -189,70 +132,7 @@ export const getProducts = async (req, res) => {
   }
    
 
-// export async function getProductID(req, res) {
-//     if (req.method !== "POST") {
-//       res.setHeader("Allow", ["POST"]);
-//       return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
-//     }
-  
-//     const { shop, accessToken, productId } = req.body || {};
-//     if (!shop || !accessToken || !productId) {
-//       return res
-//         .status(400)
-//         .json({ error: "Missing required parameters (shop, accessToken, productId)" });
-//     }
-  
-//     try {
-//       const apiVersion = "2025-07";
-      
-//       // Fetch product
-//       const productUrl = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
-//       console.log("Fetching product from URL:", productUrl);
-      
-//       const productResponse = await fetch(productUrl, {
-//         headers: {
-//           "X-Shopify-Access-Token": accessToken,
-//           "Content-Type": "application/json",
-//         },
-//       });
-  
-//       if (!productResponse.ok) {
-//         const text = await productResponse.text();
-//         console.error("Shopify error:", text);
-//         return res.status(500).json({ error: "Failed to fetch product from Shopify" });
-//       }
-  
-//       const productData = await productResponse.json();
-//       console.log("Product Data:", JSON.stringify(productData, null, 2));
-  
-//       // Fetch metafields separately
-//       const metafieldsUrl = `https://${shop}/admin/api/${apiVersion}/products/${productId}/metafields.json`;
-//       console.log("Fetching metafields from URL:", metafieldsUrl);
-      
-//       const metafieldsResponse = await fetch(metafieldsUrl, {
-//         headers: {
-//           "X-Shopify-Access-Token": accessToken,
-//           "Content-Type": "application/json",
-//         },
-//       });
-  
-//       if (metafieldsResponse.ok) {
-//         const metafieldsData = await metafieldsResponse.json();
-//         console.log("Metafields Data:", JSON.stringify(metafieldsData, null, 2));
-//         productData.product.metafields = metafieldsData.metafields;
-//       } else {
-//         console.log("Failed to fetch metafields. Status:", metafieldsResponse.status);
-//         const errorText = await metafieldsResponse.text();
-//         console.log("Metafields error:", errorText);
-//       }
-  
-//       console.log("Final Product Data with Metafields:", JSON.stringify(productData, null, 2));
-//       return res.status(200).json(productData);
-//     } catch (err) {
-//       console.error("Error in getProductID:", err);
-//       return res.status(500).json({ error: err.message || "Unexpected server error" });
-//     }
-//   }
+
 
 
 export async function getProductID(req, res) {

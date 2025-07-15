@@ -243,7 +243,9 @@ export async function getDutifyLandedCostById(req, res) {
 }
 
 
-  
+
+
+
 // export async function calculateLandedCost(req, res) {
 //   if (req.method !== 'POST') {
 //     res.setHeader('Allow', ['POST']);
@@ -312,8 +314,6 @@ export async function getDutifyLandedCostById(req, res) {
 //       }
 //     };
 
-//     console.log("Request body:", JSON.stringify(requestBody));
-
 //     // Call Dutify API
 //     const response = await fetch('https://dutify.com/api/v1/landed_cost_calculator', {
 //       method: 'POST',
@@ -324,7 +324,6 @@ export async function getDutifyLandedCostById(req, res) {
 //       body: JSON.stringify(requestBody)
 //     });
 
-//     console.log("API response status:", response.status);
 //     const dutifyData = await response.json();
     
 //     if (!response.ok) {
@@ -350,8 +349,34 @@ export async function getDutifyLandedCostById(req, res) {
 //     const lineItem = dutifyData.included?.find(item => item.type === 'landed_cost_result_item');
 //     const lineItemAttributes = lineItem?.attributes || {};
     
-//     // Get notes from the response
-//     const notes = dutifyData.included?.filter(item => item.type === 'calculation_note') || [];
+//     // Hardcoded exchange rates to USD
+//     const exchangeRatesToUSD = {
+//       'USD': 1.0,
+//       'EUR': 1.09,
+//       'GBP': 1.27,
+//       'JPY': 0.0068,
+//       'CAD': 0.74,
+//       'AUD': 0.66,
+//       'CNY': 0.14,
+//       'INR': 0.012
+//     };
+    
+//     // Calculate margin in USD
+//     let margin;
+    
+//     if (responseCurrency === 'USD') {
+//       // If already in USD, direct calculation
+//       margin = subtotal > 0 ? 
+//         ((parseFloat(attributes.landed_cost_total || 0) - subtotal) / subtotal) * 100 : 0;
+//     } else {
+//       // Convert to USD for margin calculation
+//       const exchangeRate = exchangeRatesToUSD[responseCurrency] || 1;
+//       const landedCostUSD = parseFloat(attributes.landed_cost_total || 0) * exchangeRate;
+//       const subtotalUSD = subtotal * exchangeRatesToUSD[currency];
+      
+//       margin = subtotalUSD > 0 ? 
+//         ((landedCostUSD - subtotalUSD) / subtotalUSD) * 100 : 0;
+//     }
     
 //     // Format data for database
 //     const formattedData = {
@@ -383,12 +408,9 @@ export async function getDutifyLandedCostById(req, res) {
 //         (parseFloat(attributes.sales_tax_total) / subtotal) * 100 : 0,
 //       item_vat_amount: parseFloat(attributes.sales_tax_total || 0),
       
-//       // Calculate margin in original currency
-//       margin: subtotal > 0 ? 
-//         ((parseFloat(attributes.landed_cost_total || 0) - subtotal) / subtotal) * 100 : 0,
-        
-//       // Store any notes from the API
-//       notes: notes.map(note => note.attributes?.note).filter(Boolean)
+//       input_currency: currency,
+//       // Calculate margin in USD
+//       margin: margin
 //     };
 
 //     // Save to database
@@ -429,6 +451,7 @@ export async function calculateLandedCost(req, res) {
     destinationCountry, 
     hsCode, 
     description,
+    productTitle,
     currency = 'USD'
   } = req.body || {};
 
@@ -475,7 +498,7 @@ export async function calculateLandedCost(req, res) {
             origin_country_code: originCountry,
             unit_price: parseFloat(productValue) / parseInt(quantity),
             quantity: parseInt(quantity),
-            product_title: description || 'Product',
+            product_title: productTitle || description || 'Product',
             product_classification_hs: hsCode || ''
           }
         ]
@@ -557,6 +580,7 @@ export async function calculateLandedCost(req, res) {
       destination_country: destinationCountry,
       hs_code: lineItemAttributes.hs_code || hsCode || '',
       description: description || '',
+      product_title: productTitle || '',
       currency: responseCurrency,
       
       // Dutify response data
@@ -577,7 +601,6 @@ export async function calculateLandedCost(req, res) {
       item_vat_amount: parseFloat(attributes.sales_tax_total || 0),
       
       input_currency: currency,
-      // Calculate margin in USD
       margin: margin
     };
 
