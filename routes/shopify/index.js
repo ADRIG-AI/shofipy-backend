@@ -4,6 +4,7 @@ import { getShopInfo } from '../../controllers/shopify/shopInfoController.js';
 import { createImage, deleteImage, getAllImages, getImageID, getImages, updateImageID } from '../../controllers/shopify/imageController.js';
 import { getPendingReviewCount, getAutoClassifiedCount, getManualOverridesCount } from '../../controllers/shopify/hs_codeController.js';
 import { getLandedCostHistory, getLandedCostStats, saveLandedCostCalculation } from '../../controllers/shopify/landedCostController.js';
+import { getAllOrders, getOrderById, getOrderDetails, updateOrder } from '../../controllers/shopify/OrderController.js';
 
 
 const router = express.Router();
@@ -39,4 +40,9 @@ router.post('/landed-cost/save', saveLandedCostCalculation);
 router.post('/landed-cost/history', getLandedCostHistory);
 router.post('/landed-cost/stats', getLandedCostStats);
 
+
+router.post('/orders/all', getAllOrders);
+router.post('/orders/get', getOrderById);
+router.post('/orders/update', updateOrder);
+router.post('/orders/details', getOrderDetails);
 export default router;
