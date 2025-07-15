@@ -243,199 +243,6 @@ export async function getDutifyLandedCostById(req, res) {
 }
 
 
-
-
-
-// export async function calculateLandedCost(req, res) {
-//   if (req.method !== 'POST') {
-//     res.setHeader('Allow', ['POST']);
-//     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
-//   }
-
-//   const { 
-//     productValue, 
-//     quantity, 
-//     shippingCost = 0, 
-//     insurance = 0, 
-//     originCountry, 
-//     destinationCountry, 
-//     hsCode, 
-//     description,
-//     currency = 'USD'
-//   } = req.body || {};
-
-//   // Validate required fields
-//   if (!productValue || !quantity || !originCountry || !destinationCountry) {
-//     return res.status(400).json({ 
-//       error: 'Missing required parameters. Please provide productValue, quantity, originCountry, and destinationCountry.' 
-//     });
-//   }
-
-//   // List of supported countries by Dutify
-//   const supportedCountries = ['US', 'GB', 'CA', 'AU', 'DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'IE', 'PT', 'GR', 'FI', 'SE', 'DK', 'NO', 'JP', 'KR', 'SG', 'NZ'];
-  
-//   // Check if countries are supported
-//   if (!supportedCountries.includes(originCountry)) {
-//     return res.status(400).json({ 
-//       error: `Origin country "${originCountry}" is not supported. Supported countries: ${supportedCountries.join(', ')}` 
-//     });
-//   }
-  
-//   if (!supportedCountries.includes(destinationCountry)) {
-//     return res.status(400).json({ 
-//       error: `Destination country "${destinationCountry}" is not supported. Supported countries: ${supportedCountries.join(', ')}` 
-//     });
-//   }
-
-//   try {
-//     const apiKey = process.env.DUTIFY_API_KEY;
-    
-//     if (!apiKey) {
-//       return res.status(400).json({ error: 'Dutify API key not configured' });
-//     }
-
-//     // Format request according to Dutify API documentation
-//     const requestBody = {
-//       data: {
-//         export_country_code: originCountry,
-//         import_country_code: destinationCountry,
-//         input_currency_code: currency,
-//         shipping_cost: parseFloat(shippingCost) || 0,
-//         insurance_cost: parseFloat(insurance) || 0,
-//         line_items: [
-//           {
-//             origin_country_code: originCountry,
-//             unit_price: parseFloat(productValue) / parseInt(quantity),
-//             quantity: parseInt(quantity),
-//             product_title: description || 'Product',
-//             product_classification_hs: hsCode || ''
-//           }
-//         ]
-//       }
-//     };
-
-//     // Call Dutify API
-//     const response = await fetch('https://dutify.com/api/v1/landed_cost_calculator', {
-//       method: 'POST',
-//       headers: {
-//         'Content-Type': 'application/json',
-//         'X-API-KEY': apiKey
-//       },
-//       body: JSON.stringify(requestBody)
-//     });
-
-//     const dutifyData = await response.json();
-    
-//     if (!response.ok) {
-//       // Extract error message from Dutify response
-//       let errorMessage = 'Failed to calculate landed cost';
-//       if (dutifyData.data && Array.isArray(dutifyData.data)) {
-//         const errorObj = dutifyData.data.find(item => item.type === 'error');
-//         if (errorObj && errorObj.attributes) {
-//           errorMessage = `${errorObj.attributes.message} (${errorObj.attributes.attribute})`;
-//         }
-//       }
-//       throw new Error(errorMessage);
-//     }
-
-//     // Calculate subtotal for margin calculation
-//     const subtotal = parseFloat(productValue) * parseInt(quantity);
-    
-//     // Extract relevant data from the response
-//     const attributes = dutifyData.data?.attributes || {};
-//     const responseCurrency = attributes.currency_code || currency;
-    
-//     // Get the first line item from the included data
-//     const lineItem = dutifyData.included?.find(item => item.type === 'landed_cost_result_item');
-//     const lineItemAttributes = lineItem?.attributes || {};
-    
-//     // Hardcoded exchange rates to USD
-//     const exchangeRatesToUSD = {
-//       'USD': 1.0,
-//       'EUR': 1.09,
-//       'GBP': 1.27,
-//       'JPY': 0.0068,
-//       'CAD': 0.74,
-//       'AUD': 0.66,
-//       'CNY': 0.14,
-//       'INR': 0.012
-//     };
-    
-//     // Calculate margin in USD
-//     let margin;
-    
-//     if (responseCurrency === 'USD') {
-//       // If already in USD, direct calculation
-//       margin = subtotal > 0 ? 
-//         ((parseFloat(attributes.landed_cost_total || 0) - subtotal) / subtotal) * 100 : 0;
-//     } else {
-//       // Convert to USD for margin calculation
-//       const exchangeRate = exchangeRatesToUSD[responseCurrency] || 1;
-//       const landedCostUSD = parseFloat(attributes.landed_cost_total || 0) * exchangeRate;
-//       const subtotalUSD = subtotal * exchangeRatesToUSD[currency];
-      
-//       margin = subtotalUSD > 0 ? 
-//         ((landedCostUSD - subtotalUSD) / subtotalUSD) * 100 : 0;
-//     }
-    
-//     // Format data for database
-//     const formattedData = {
-//       // Request parameters
-//       product_value: parseFloat(productValue) || 0,
-//       quantity: parseInt(quantity) || 0,
-//       shipping_cost: parseFloat(shippingCost) || 0,
-//       insurance: parseFloat(insurance) || 0,
-//       origin_country: originCountry,
-//       destination_country: destinationCountry,
-//       hs_code: lineItemAttributes.hs_code || hsCode || '',
-//       description: description || '',
-//       currency: responseCurrency,
-      
-//       // Dutify response data
-//       total_landed_cost: parseFloat(attributes.landed_cost_total || 0),
-//       total_duties: parseFloat(attributes.duty_total || 0),
-//       total_taxes: parseFloat(attributes.sales_tax_total || 0),
-//       total_fees: parseFloat(attributes.additional_tax_and_charges_total || 0),
-      
-//       // Store the complete response as JSON
-//       full_response: dutifyData,
-      
-//       // Item specific data
-//       item_duty_rate: parseFloat(attributes.duty_total || 0) > 0 ? 
-//         (parseFloat(attributes.duty_total) / subtotal) * 100 : 0,
-//       item_duty_amount: parseFloat(attributes.duty_total || 0),
-//       item_vat_rate: parseFloat(attributes.sales_tax_total || 0) > 0 ? 
-//         (parseFloat(attributes.sales_tax_total) / subtotal) * 100 : 0,
-//       item_vat_amount: parseFloat(attributes.sales_tax_total || 0),
-      
-//       input_currency: currency,
-//       // Calculate margin in USD
-//       margin: margin
-//     };
-
-//     // Save to database
-//     const { data, error } = await supabase
-//       .from('dutify_landed_costs')
-//       .insert(formattedData)
-//       .select();
-
-//     if (error) throw error;
-
-//     return res.status(200).json({ 
-//       success: true, 
-//       data: data[0],
-//       dutifyResponse: dutifyData
-//     });
-//   } catch (err) {
-//     console.error('Error calculating landed cost:', err);
-//     return res.status(500).json({ 
-//       error: err.message || 'Failed to calculate landed cost',
-//       details: 'Please check the API key and request parameters'
-//     });
-//   }
-// }
-
-
 export async function calculateLandedCost(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -452,7 +259,7 @@ export async function calculateLandedCost(req, res) {
     hsCode, 
     description,
     productTitle,
-    currency = 'USD'
+    currency
   } = req.body || {};
 
   // Validate required fields
@@ -496,7 +303,7 @@ export async function calculateLandedCost(req, res) {
         line_items: [
           {
             origin_country_code: originCountry,
-            unit_price: parseFloat(productValue) / parseInt(quantity),
+            unit_price: parseFloat(productValue),
             quantity: parseInt(quantity),
             product_title: productTitle || description || 'Product',
             product_classification_hs: hsCode || ''
@@ -625,8 +432,6 @@ export async function calculateLandedCost(req, res) {
     });
   }
 }
-
-
 
 
 export async function searchApprovedModifiedProducts(req, res) {
