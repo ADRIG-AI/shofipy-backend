@@ -5,6 +5,10 @@ import { createImage, deleteImage, getAllImages, getImageID, getImages, updateIm
 import { getPendingReviewCount, getAutoClassifiedCount, getManualOverridesCount } from '../../controllers/shopify/hs_codeController.js';
 import { getLandedCostHistory, getLandedCostStats, saveLandedCostCalculation } from '../../controllers/shopify/landedCostController.js';
 import { getAllOrders, getOrderById, getOrderDetails, updateOrder } from '../../controllers/shopify/OrderController.js';
+import { saveInvoice } from '../../controllers/shopify/InvoiceController.js';
+import { savePackingList } from '../../controllers/shopify/PackingListController.js';
+import { getDocument } from '../../controllers/shopify/DocumentController.js';
+
 
 
 const router = express.Router();
@@ -45,4 +49,11 @@ router.post('/orders/all', getAllOrders);
 router.post('/orders/get', getOrderById);
 router.post('/orders/update', updateOrder);
 router.post('/orders/details', getOrderDetails);
+
+
+router.post('/invoices/save', saveInvoice);
+router.post('/packing-lists/save', savePackingList);
+
+
+router.get('/documents/view', getDocument);
 export default router;
