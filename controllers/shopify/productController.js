@@ -30,110 +30,175 @@ export const getProducts = async (req, res) => {
     }
 };
 
+
   
-  export default async function getAllProducts(req, res) {
-    if (req.method !== 'POST') {
-      res.setHeader('Allow', ['POST']);
-      return res.status(405).end(`Method ${req.method} Not Allowed`);
-    }
-  
-    const { shop, accessToken, filter } = req.body || {};
-    if (!shop || !accessToken) {
-      return res.status(400).json({ error: 'Missing shop or access token' });
-    }
-  
-    try {
-      const limit = 250;   
-      let sinceId = null;  
-      const allProducts = [];
-  
-      while (true) {
-        let url = `https://${shop}/admin/api/2025-07/products.json?limit=${limit}`;
-        if (sinceId) url += `&since_id=${sinceId}`;
-  
-        const response = await fetch(url, {
-          headers: {
-            'X-Shopify-Access-Token': accessToken,
-            'Content-Type': 'application/json',
-          },
-        });
-  
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.error('Failed to fetch products from Shopify:', errorData);
-          throw new Error('Failed to fetch products from Shopify');
-        }
-  
-        const { products = [] } = await response.json();
-  
-        if (products.length === 0) break;
-  
-        // Apply filter if specified
-        let filteredProducts = products;
-        if (filter) {
-          filteredProducts = products.filter(product => {
-            const tags = product.tags ? product.tags.split(',').map(tag => tag.trim()) : [];
-            
-            switch (filter) {
-              case 'hs_pending':
-                const hasHSStatus = tags.some(tag => tag.startsWith('hs_status_'));
-                const isPending = tags.some(tag => tag === 'hs_status_pending');
-                return !hasHSStatus || isPending;
-              
-              case 'hs_approved':
-                return tags.some(tag => tag === 'hs_status_approved');
-              
-              case 'hs_modified':
-                return tags.some(tag => tag === 'hs_status_modified');
-              
-              default:
-                return true;
-            }
-          });
-        }
-  
-        // Add HS code data to each product
-        const productsWithHSData = filteredProducts.map(product => {
-          const tags = product.tags ? product.tags.split(',').map(tag => tag.trim()) : [];
-          const hsCodeData = {};
-          
-          tags.forEach(tag => {
-            if (tag.startsWith('hs_code_')) {
-              hsCodeData.hsCode = tag.replace('hs_code_', '');
-            } else if (tag.startsWith('hs_confidence_')) {
-              hsCodeData.confidence = parseInt(tag.replace('hs_confidence_', ''));
-            } else if (tag.startsWith('hs_status_')) {
-              hsCodeData.hsStatus = tag.replace('hs_status_', '');
-            }
-          });
-  
-          return {
-            ...product,
-            ...hsCodeData
-          };
-        });
-  
-        allProducts.push(...productsWithHSData);
-        sinceId = products[products.length - 1].id; 
-  
-        if (products.length < limit) break;       
-      }
-  
-      return res.status(200).json({
-        products: allProducts,
-        count: allProducts.length,
-      });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({
-        error: error.message || 'Failed to fetch products',
-      });
-    }
+export default async function getAllProducts(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', ['POST']);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
+
+  const { shop, accessToken, filter } = req.body || {};
+  if (!shop || !accessToken) {
+    return res.status(400).json({ error: 'Missing shop or access token' });
+  }
+
+  try {
+    const limit = 250;   
+    let sinceId = null;  
+    const allProducts = [];
+
+    while (true) {
+      let url = `https://${shop}/admin/api/2025-07/products.json?limit=${limit}`;
+      if (sinceId) url += `&since_id=${sinceId}`;
+
+      const response = await fetch(url, {
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Failed to fetch products from Shopify:', errorData);
+        throw new Error('Failed to fetch products from Shopify');
+      }
+
+      const { products = [] } = await response.json();
+
+      if (products.length === 0) break;
+
+      // Apply filter if specified
+      let filteredProducts = products;
+      if (filter) {
+        filteredProducts = products.filter(product => {
+          const tags = product.tags ? product.tags.split(',').map(tag => tag.trim()) : [];
+          
+          switch (filter) {
+            case 'hs_pending':
+              const hasHSStatus = tags.some(tag => tag.startsWith('hs_status_'));
+              const isPending = tags.some(tag => tag === 'hs_status_pending');
+              return !hasHSStatus || isPending;
+            
+            case 'hs_approved':
+              return tags.some(tag => tag === 'hs_status_approved');
+            
+            case 'hs_modified':
+              return tags.some(tag => tag === 'hs_status_modified');
+            
+            default:
+              return true;
+          }
+        });
+      }
+
+      // Add HS code data to each product
+      const productsWithHSData = filteredProducts.map(product => {
+        const tags = product.tags ? product.tags.split(',').map(tag => tag.trim()) : [];
+        const hsCodeData = {};
+        let complianceStatus = "pending";
+        
+        tags.forEach(tag => {
+          if (tag.startsWith('hs_code_')) {
+            hsCodeData.hsCode = tag.replace('hs_code_', '');
+          } else if (tag.startsWith('hs_confidence_')) {
+            hsCodeData.confidence = parseInt(tag.replace('hs_confidence_', ''));
+          } else if (tag.startsWith('hs_status_')) {
+            hsCodeData.hsStatus = tag.replace('hs_status_', '');
+            complianceStatus = tag.replace('hs_status_', '');
+          }
+        });
+
+        return {
+          ...product,
+          ...hsCodeData,
+          complianceStatus
+        };
+      });
+
+      allProducts.push(...productsWithHSData);
+      sinceId = products[products.length - 1].id; 
+
+      if (products.length < limit) break;       
+    }
+
+    return res.status(200).json({
+      products: allProducts,
+      count: allProducts.length,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: error.message || 'Failed to fetch products',
+    });
+  }
+}
+
    
 
 
 
+
+// export async function getProductID(req, res) {
+//   if (req.method !== "POST") {
+//     res.setHeader("Allow", ["POST"]);
+//     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
+//   }
+
+//   const { shop, accessToken, productId } = req.body || {};
+//   if (!shop || !accessToken || !productId) {
+//     return res.status(400).json({ error: "Missing required parameters (shop, accessToken, productId)" });
+//   }
+
+//   try {
+//     const apiVersion = "2025-07";
+//     const url = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
+    
+//     const productResponse = await fetch(url, {
+//       headers: {
+//         "X-Shopify-Access-Token": accessToken,
+//         "Content-Type": "application/json",
+//       },
+//     });
+
+//     if (!productResponse.ok) {
+//       const detail = await productResponse.text();
+//       return res.status(500).json({ error: "Failed to fetch product from Shopify", detail });
+//     }
+
+//     const productData = await productResponse.json();
+//     // console.log("Raw Product Data:", JSON.stringify(productData, null, 2));
+    
+
+//     const tags = productData.product.tags ? productData.product.tags.split(',').map(tag => tag.trim()) : [];
+   
+//     const hsCodeData = {};
+    
+//     tags.forEach(tag => {
+//       if (tag.startsWith('hs_code_')) {
+//         hsCodeData.suggestedCode = tag.replace('hs_code_', '');
+//       } else if (tag.startsWith('hs_confidence_')) {
+//         hsCodeData.confidence = parseInt(tag.replace('hs_confidence_', ''));
+//       } else if (tag.startsWith('hs_status_')) {
+//         hsCodeData.status = tag.replace('hs_status_', '');
+//       }
+//     });
+
+//     // console.log("Extracted HS Code Data:", hsCodeData);
+
+//     const responseData = {
+//       ...productData.product,
+//       hsCode: hsCodeData
+//     };
+
+//     // console.log("Final Response Data:", JSON.stringify(responseData, null, 2));
+//     return res.status(200).json(responseData);
+//   } catch (err) {
+//     console.error("Error in getProductID:", err);
+//     return res.status(500).json({ error: err.message || "Unexpected server error" });
+//   }
+// }
 
 export async function getProductID(req, res) {
   if (req.method !== "POST") {
@@ -163,12 +228,11 @@ export async function getProductID(req, res) {
     }
 
     const productData = await productResponse.json();
-    // console.log("Raw Product Data:", JSON.stringify(productData, null, 2));
     
-
     const tags = productData.product.tags ? productData.product.tags.split(',').map(tag => tag.trim()) : [];
    
     const hsCodeData = {};
+    let complianceStatus = "pending";
     
     tags.forEach(tag => {
       if (tag.startsWith('hs_code_')) {
@@ -176,24 +240,26 @@ export async function getProductID(req, res) {
       } else if (tag.startsWith('hs_confidence_')) {
         hsCodeData.confidence = parseInt(tag.replace('hs_confidence_', ''));
       } else if (tag.startsWith('hs_status_')) {
-        hsCodeData.status = tag.replace('hs_status_', '');
+        const status = tag.replace('hs_status_', '');
+        hsCodeData.status = status;
+        complianceStatus = status;
       }
     });
 
-    // console.log("Extracted HS Code Data:", hsCodeData);
-
-    const responseData = {
+    // Return data in a format that works for both components
+    return res.status(200).json({
       ...productData.product,
-      hsCode: hsCodeData
-    };
-
-    // console.log("Final Response Data:", JSON.stringify(responseData, null, 2));
-    return res.status(200).json(responseData);
+      hsCode: hsCodeData,
+      complianceStatus: complianceStatus,
+      product: productData.product  // Include product property for backward compatibility
+    });
   } catch (err) {
     console.error("Error in getProductID:", err);
     return res.status(500).json({ error: err.message || "Unexpected server error" });
   }
 }
+
+
 
 
 
