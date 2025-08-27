@@ -8,6 +8,7 @@ import { getAllOrders, getOrderById, getOrderDetails, updateOrder } from '../../
 import { saveInvoice } from '../../controllers/shopify/InvoiceController.js';
 import { savePackingList } from '../../controllers/shopify/PackingListController.js';
 import { getDocument } from '../../controllers/shopify/DocumentController.js';
+import { processProductESG, getProductESGData, getESGSummary } from '../../controllers/shopify/esgController.js';
 
 
 
@@ -56,4 +57,11 @@ router.post('/packing-lists/save', savePackingList);
 
 
 router.get('/documents/view', getDocument);
+
+
+
+router.post('/esg/process', processProductESG);
+router.post('/esg/data', getProductESGData);
+router.post('/esg/summary', getESGSummary);
+
 export default router;

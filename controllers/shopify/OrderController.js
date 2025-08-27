@@ -187,7 +187,6 @@ export async function getOrderDetails(req, res) {
     }
 
     const orderData = await orderResponse.json();
-    console.log('Order data fetched:', JSON.stringify(orderData, null, 2));
     
     // Get shop info for logo and address
     const shopUrl = `https://${shop}/admin/api/2025-07/shop.json?fields=name,address1,city,province,zip,country,logo`;
@@ -203,7 +202,6 @@ export async function getOrderDetails(req, res) {
     if (shopResponse.ok) {
       const shopResult = await shopResponse.json();
       shopData = shopResult.shop;
-      console.log('Shop data fetched:', JSON.stringify(shopData, null, 2));
     }
 
     return res.status(200).json({
