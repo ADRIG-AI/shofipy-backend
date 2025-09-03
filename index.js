@@ -124,6 +124,43 @@ app.post('/api/send-esg-request', async (req, res) => {
 });
 
 // Mount API routes AFTER ESG endpoints
+
+
+app.post('/api/auth/token', async (req, res) => {
+  try {
+    const { code, shop, state } = req.body;
+    
+    if (!code || !shop || !state) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    // Exchange code for access token with Shopify
+    const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.SHOPIFY_API_KEY,
+        client_secret: process.env.SHOPIFY_API_SECRET,
+        code
+      })
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error('Failed to get access token from Shopify');
+    }
+
+    const tokenData = await tokenResponse.json();
+    
+    res.json({
+      success: true,
+      access_token: tokenData.access_token
+    });
+  } catch (error) {
+    console.error('Token exchange error:', error);
+    res.status(500).json({ error: 'Failed to exchange token' });
+  }
+});
+
 app.use('/api', apiRoutes);
 
 app.listen(port, () => {
