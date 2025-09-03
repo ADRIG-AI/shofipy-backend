@@ -19,7 +19,7 @@ const corsOptions = {
     'http://localhost:8080',
     'https://shopify-frontend-pearl.vercel.app',
     'https://shopify-frontend-rouge.vercel.app',
-    'https://www.shopifyq.com/'
+    'https://www.shopifyq.com'
   ],
   credentials: true,
 };
