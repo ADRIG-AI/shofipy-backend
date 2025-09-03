@@ -24,7 +24,7 @@ const corsOptions = {
   credentials: true,
 };
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('/api/auth/*', cors(corsOptions));
 app.post('/api/webhook', express.raw({ type: 'application/json' }), webhookController);
 
 app.use(bodyParser.json({ limit: '25mb' }));
