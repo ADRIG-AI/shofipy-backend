@@ -22,9 +22,13 @@ const corsOptions = {
     'https://www.shopifyq.com'
   ],
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
-app.options('/api/auth/*', cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.post('/api/webhook', express.raw({ type: 'application/json' }), webhookController);
 
 app.use(bodyParser.json({ limit: '25mb' }));
