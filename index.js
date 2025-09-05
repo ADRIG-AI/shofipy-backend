@@ -20,7 +20,7 @@ const corsOptions = {
     'https://shopify-frontend-pearl.vercel.app',
     'https://shopify-frontend-rouge.vercel.app',
     'https://www.shopifyq.com',
-    'https://shofipy-backend-ten.vercel.app'
+    'https://shopifyq.com'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
