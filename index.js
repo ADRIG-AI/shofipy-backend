@@ -14,10 +14,26 @@ const port = process.env.PORT || 3000;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
+const corsOptions = {
+
+
+  origin: [
+
+    'http://localhost:8080',
+
+    'https://shopify-frontend-pearl.vercel.app',
+
+    'https://shopify-frontend-rouge.vercel.app',
+
+    'https://www.shopifyq.com'
+
+  ],
+
+  credentials: true,
+
+};
+
+app.use(cors(corsOptions));
 app.options('*', cors());
 app.post('/api/webhook', express.raw({ type: 'application/json' }), webhookController);
 
