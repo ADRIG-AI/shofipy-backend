@@ -10,27 +10,17 @@ import sendMailTo from './utils/sendMailTo.js';
 
 dotenv.config();
 const app = express();
-const port = process.env.PORT || 3000;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 const corsOptions = {
-
-
   origin: [
-
     'http://localhost:8080',
-
     'https://shopify-frontend-pearl.vercel.app',
-
     'https://shopify-frontend-rouge.vercel.app',
-
     'https://www.shopifyq.com'
-
   ],
-
   credentials: true,
-
 };
 
 app.use(cors(corsOptions));
@@ -133,9 +123,6 @@ app.post('/api/send-esg-request', async (req, res) => {
   }
 });
 
-// Mount API routes AFTER ESG endpoints
-
-
 app.post('/api/auth/token', async (req, res) => {
   try {
     const { code, shop, state } = req.body;
@@ -173,8 +160,4 @@ app.post('/api/auth/token', async (req, res) => {
 
 app.use('/api', apiRoutes);
 
-app.listen(port, () => {
-  console.log(`🚀 Server is running on http://localhost:${port}`);
-  console.log(`🧪 Health check:     http://localhost:${port}/`);
-  console.log(`📬 Webhook endpoint: http://localhost:${port}/api/webhook`);
-});
+export default app;
