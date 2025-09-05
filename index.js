@@ -10,6 +10,7 @@ import sendMailTo from './utils/sendMailTo.js';
 
 dotenv.config();
 const app = express();
+const port = process.env.PORT || 3000;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
@@ -17,14 +18,12 @@ const corsOptions = {
   origin: [
     'http://localhost:8080',
     'https://shopify-frontend-pearl.vercel.app',
-    'https://shopify-frontend-rouge.vercel.app',
-    'https://www.shopifyq.com'
+    'https://shopify-frontend-rouge.vercel.app'
   ],
   credentials: true,
 };
-
 app.use(cors(corsOptions));
-app.options('*', cors());
+
 app.post('/api/webhook', express.raw({ type: 'application/json' }), webhookController);
 
 app.use(bodyParser.json({ limit: '25mb' }));
@@ -123,41 +122,11 @@ app.post('/api/send-esg-request', async (req, res) => {
   }
 });
 
-app.post('/api/auth/token', async (req, res) => {
-  try {
-    const { code, shop, state } = req.body;
-    
-    if (!code || !shop || !state) {
-      return res.status(400).json({ error: 'Missing required parameters' });
-    }
-
-    // Exchange code for access token with Shopify
-    const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: process.env.SHOPIFY_API_KEY,
-        client_secret: process.env.SHOPIFY_API_SECRET,
-        code
-      })
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error('Failed to get access token from Shopify');
-    }
-
-    const tokenData = await tokenResponse.json();
-    
-    res.json({
-      success: true,
-      access_token: tokenData.access_token
-    });
-  } catch (error) {
-    console.error('Token exchange error:', error);
-    res.status(500).json({ error: 'Failed to exchange token' });
-  }
-});
-
+// Mount API routes AFTER ESG endpoints
 app.use('/api', apiRoutes);
 
-export default app;
+app.listen(port, () => {
+  console.log(`🚀 Server is running on http://localhost:${port}`);
+  console.log(`🧪 Health check:     http://localhost:${port}/`);
+  console.log(`📬 Webhook endpoint: http://localhost:${port}/api/webhook`);
+});
