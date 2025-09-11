@@ -1,37 +1,66 @@
-export const getProducts = async (req, res) => {
-    if (req.method !== 'POST') {
-        res.setHeader('Allow', ['POST']);
-        return res.status(405).end(`Method ${req.method} Not Allowed`);
-    }
+const graphqlRequest = async (shop, accessToken, query, variables = {}) => {
+  const response = await fetch(`https://${shop}/admin/api/2024-04/graphql.json`, {
+    method: 'POST',
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query, variables }),
+  });
 
-    const { shop, accessToken } = req.body;
-    if (!shop || !accessToken) {
-        return res.status(400).json({ error: 'Missing shop or access token' });
-    }
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
 
-    try {
-        const response = await fetch(`https://${shop}/admin/api/2023-10/products.json?limit=5`, {
-            headers: {
-                'X-Shopify-Access-Token': accessToken,
-                'Content-Type': 'application/json'
-            }
-        });
+  const result = await response.json();
+  if (result.errors) {
+    throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
+  }
 
-        if (!response.ok) {
-            const errorData = await response.text();
-            console.error('Failed to fetch products from Shopify:', errorData);
-            throw new Error('Failed to fetch products from Shopify');
-        }
-
-        const data = await response.json();
-        res.status(200).json(data);
-    } catch (error) {
-        res.status(500).json({ error: error.message || 'Failed to fetch products' });
-    }
+  return result.data;
 };
 
+export const getProducts = async (req, res) => {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', ['POST']);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
 
-  
+  const { shop, accessToken } = req.body;
+  if (!shop || !accessToken) {
+    return res.status(400).json({ error: 'Missing shop or access token' });
+  }
+
+  try {
+    const query = `
+      query products($first: Int!) {
+        products(first: $first) {
+          edges {
+            node {
+              id
+              title
+              handle
+              status
+              tags
+              vendor
+              productType
+              createdAt
+              updatedAt
+            }
+          }
+        }
+      }
+    `;
+
+    const data = await graphqlRequest(shop, accessToken, query, { first: 5 });
+    const products = data.products.edges.map(edge => edge.node);
+    
+    res.status(200).json({ products });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Failed to fetch products' });
+  }
+};
+
 export default async function getAllProducts(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -44,58 +73,86 @@ export default async function getAllProducts(req, res) {
   }
 
   try {
-    const limit = 250;   
-    let sinceId = null;  
     const allProducts = [];
+    let hasNextPage = true;
+    let cursor = null;
 
-    while (true) {
-      let url = `https://${shop}/admin/api/2025-07/products.json?limit=${limit}`;
-      if (sinceId) url += `&since_id=${sinceId}`;
+    while (hasNextPage) {
+      const query = `
+        query products($first: Int!, $after: String) {
+          products(first: $first, after: $after) {
+            edges {
+              node {
+                id
+                title
+                handle
+                status
+                tags
+                vendor
+                productType
+                createdAt
+                updatedAt
+                featuredImage {
+                  url
+                  altText
+                }
+                images(first: 5) {
+                  edges {
+                    node {
+                      url
+                      altText
+                    }
+                  }
+                }
+                variants(first: 5) {
+                  edges {
+                    node {
+                      id
+                      price
+                      sku
+                      inventoryQuantity
+                    }
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      `;
 
-      const response = await fetch(url, {
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
+      const data = await graphqlRequest(shop, accessToken, query, {
+        first: 250,
+        after: cursor,
       });
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Failed to fetch products from Shopify:', errorData);
-        throw new Error('Failed to fetch products from Shopify');
-      }
+      const products = data.products.edges.map(edge => edge.node);
 
-      const { products = [] } = await response.json();
-
-      if (products.length === 0) break;
-
-      // Apply filter if specified
       let filteredProducts = products;
       if (filter) {
         filteredProducts = products.filter(product => {
-          const tags = product.tags ? product.tags.split(',').map(tag => tag.trim()) : [];
+          const tags = product.tags || [];
           
           switch (filter) {
             case 'hs_pending':
               const hasHSStatus = tags.some(tag => tag.startsWith('hs_status_'));
               const isPending = tags.some(tag => tag === 'hs_status_pending');
               return !hasHSStatus || isPending;
-            
             case 'hs_approved':
               return tags.some(tag => tag === 'hs_status_approved');
-            
             case 'hs_modified':
               return tags.some(tag => tag === 'hs_status_modified');
-            
             default:
               return true;
           }
         });
       }
 
-      // Add HS code data to each product
       const productsWithHSData = filteredProducts.map(product => {
-        const tags = product.tags ? product.tags.split(',').map(tag => tag.trim()) : [];
+        const tags = product.tags || [];
         const hsCodeData = {};
         let complianceStatus = "pending";
         
@@ -118,9 +175,9 @@ export default async function getAllProducts(req, res) {
       });
 
       allProducts.push(...productsWithHSData);
-      sinceId = products[products.length - 1].id; 
-
-      if (products.length < limit) break;       
+      
+      hasNextPage = data.products.pageInfo.hasNextPage;
+      cursor = data.products.pageInfo.endCursor;
     }
 
     return res.status(200).json({
@@ -135,71 +192,6 @@ export default async function getAllProducts(req, res) {
   }
 }
 
-   
-
-
-
-
-// export async function getProductID(req, res) {
-//   if (req.method !== "POST") {
-//     res.setHeader("Allow", ["POST"]);
-//     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
-//   }
-
-//   const { shop, accessToken, productId } = req.body || {};
-//   if (!shop || !accessToken || !productId) {
-//     return res.status(400).json({ error: "Missing required parameters (shop, accessToken, productId)" });
-//   }
-
-//   try {
-//     const apiVersion = "2025-07";
-//     const url = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
-    
-//     const productResponse = await fetch(url, {
-//       headers: {
-//         "X-Shopify-Access-Token": accessToken,
-//         "Content-Type": "application/json",
-//       },
-//     });
-
-//     if (!productResponse.ok) {
-//       const detail = await productResponse.text();
-//       return res.status(500).json({ error: "Failed to fetch product from Shopify", detail });
-//     }
-
-//     const productData = await productResponse.json();
-//     // console.log("Raw Product Data:", JSON.stringify(productData, null, 2));
-    
-
-//     const tags = productData.product.tags ? productData.product.tags.split(',').map(tag => tag.trim()) : [];
-   
-//     const hsCodeData = {};
-    
-//     tags.forEach(tag => {
-//       if (tag.startsWith('hs_code_')) {
-//         hsCodeData.suggestedCode = tag.replace('hs_code_', '');
-//       } else if (tag.startsWith('hs_confidence_')) {
-//         hsCodeData.confidence = parseInt(tag.replace('hs_confidence_', ''));
-//       } else if (tag.startsWith('hs_status_')) {
-//         hsCodeData.status = tag.replace('hs_status_', '');
-//       }
-//     });
-
-//     // console.log("Extracted HS Code Data:", hsCodeData);
-
-//     const responseData = {
-//       ...productData.product,
-//       hsCode: hsCodeData
-//     };
-
-//     // console.log("Final Response Data:", JSON.stringify(responseData, null, 2));
-//     return res.status(200).json(responseData);
-//   } catch (err) {
-//     console.error("Error in getProductID:", err);
-//     return res.status(500).json({ error: err.message || "Unexpected server error" });
-//   }
-// }
-
 export async function getProductID(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -212,25 +204,79 @@ export async function getProductID(req, res) {
   }
 
   try {
-    const apiVersion = "2025-07";
-    const url = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
+    const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
     
-    const productResponse = await fetch(url, {
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-    });
+    const query = `
+      query product($id: ID!) {
+        product(id: $id) {
+          id
+          title
+          handle
+          status
+          tags
+          vendor
+          productType
+          createdAt
+          updatedAt
+          description
+          descriptionHtml
+          featuredImage {
+            url
+            altText
+          }
+          images(first: 10) {
+            edges {
+              node {
+                url
+                altText
+              }
+            }
+          }
+          options {
+            id
+            name
+            values
+          }
+          variants(first: 50) {
+            edges {
+              node {
+                id
+                title
+                price
+                compareAtPrice
+                sku
+                barcode
+                inventoryQuantity
+                weight
+                weightUnit
+                availableForSale
+                selectedOptions {
+                  name
+                  value
+                }
+                image {
+                  url
+                  altText
+                }
+              }
+            }
+          }
+          seo {
+            title
+            description
+          }
+          totalInventory
+          tracksInventory
+          onlineStoreUrl
+          onlineStorePreviewUrl
+        }
+      }
+    `;
 
-    if (!productResponse.ok) {
-      const detail = await productResponse.text();
-      return res.status(500).json({ error: "Failed to fetch product from Shopify", detail });
-    }
-
-    const productData = await productResponse.json();
+    const data = await graphqlRequest(shop, accessToken, query, { id: gid });
+    const product = data.product;
     
-    const tags = productData.product.tags ? productData.product.tags.split(',').map(tag => tag.trim()) : [];
-   
+    const tags = product.tags || [];
     const hsCodeData = {};
     let complianceStatus = "pending";
     
@@ -246,361 +292,286 @@ export async function getProductID(req, res) {
       }
     });
 
-    // Return data in a format that works for both components
-    return res.status(200).json({
-      ...productData.product,
+    const response = {
+      ...product,
       hsCode: hsCodeData,
       complianceStatus: complianceStatus,
-      product: productData.product  // Include product property for backward compatibility
-    });
+      product: product
+    };
+    return res.status(200).json(response);
   } catch (err) {
     console.error("Error in getProductID:", err);
     return res.status(500).json({ error: err.message || "Unexpected server error" });
   }
 }
 
-
-
-
-
 export async function updateProductID(req, res) {
-    if (req.method !== "POST") {
-      res.setHeader("Allow", ["POST"]);
-      return res
-        .status(405)
-        .json({ error: `Method ${req.method} Not Allowed` });
-    }
-  
-
-    const { shop, accessToken, productId, productData } = req.body || {};
-    if (!shop || !accessToken || !productId || !productData) {
-      return res
-        .status(400)
-        .json({ error: "Missing required parameters" });
-    }
-  
-    try {
-
-      const apiVersion = "2025-07";
-      const base = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
-  
-      const getResp = await fetch(base, {
-        headers: {
-          "X-Shopify-Access-Token": accessToken,
-          "Content-Type": "application/json",
-        },
-      });
-  
-      if (!getResp.ok) {
-        const detail = await getResp.text();
-        return res
-          .status(500)
-          .json({ error: "Failed to fetch current product", detail });
-      }
-  
-      const currentProduct = await getResp.json();
-      const variantId = currentProduct.product.variants?.[0]?.id;
-  
-      
-      const updatePayload = {
-        product: {
-          title: productData.title,
-          body_html: productData.body_html,
-          vendor: productData.vendor,
-          product_type: productData.product_type,
-          variants: [
-            {
-              id: variantId,
-              price: productData.price,
-              sku: productData.sku,
-              inventory_quantity: productData.inventory_quantity,
-            },
-          ],
-        },
-      };
-  
-      /* 3️⃣  PUT update to Shopify */
-      const putResp = await fetch(base, {
-        method: "PUT",
-        headers: {
-          "X-Shopify-Access-Token": accessToken,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updatePayload),
-      });
-  
-      if (!putResp.ok) {
-        const detail = await putResp.text();
-        return res
-          .status(500)
-          .json({ error: "Failed to update product", detail });
-      }
-  
-      const updated = await putResp.json();
-      return res.status(200).json(updated);
-    } catch (err) {
-      console.error(err);
-      return res
-        .status(500)
-        .json({ error: err.message || "Unexpected server error" });
-    }
-  }
-  
-
-export async function createProduct(req, res) {
-    if (req.method !== "POST") {
-      res.setHeader("Allow", ["POST"]);
-      return res
-        .status(405)
-        .json({ error: `Method ${req.method} Not Allowed` });
-    }
-  
-
-    const { shop, accessToken, productData } = req.body || {};
-    if (!shop || !accessToken || !productData) {
-      return res
-        .status(400)
-        .json({ error: "Missing required parameters" });
-    }
-  
-    const apiVersion = "2025-07";
-    const createPayload = {
-      product: {
-        title: productData.title,
-        body_html: productData.body_html,
-        vendor: productData.vendor,
-        product_type: productData.product_type,
-        variants: [
-          {
-            price: productData.price,
-            sku: productData.sku,
-            inventory_quantity: productData.inventory_quantity,
-          },
-        ],
-      },
-    };
-  
-    try {
-      const resp = await fetch(
-        `https://${shop}/admin/api/${apiVersion}/products.json`,
-        {
-          method: "POST",
-          headers: {
-            "X-Shopify-Access-Token": accessToken,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(createPayload),
-        }
-      );
-  
-      if (!resp.ok) {
-        const detail = await resp.text();
-        console.error("Shopify API Error:", detail);
-        return res
-          .status(500)
-          .json({ error: "Failed to create product", detail });
-      }
-  
-      const data = await resp.json();
-      return res.status(200).json(data);
-    } catch (err) {
-      console.error(err);
-      return res
-        .status(500)
-        .json({ error: err.message || "Unexpected server error" });
-    }
-  }
-  
-
-export async function deleteProduct(req, res) {
-    
-    if (req.method !== "DELETE" && req.method !== "POST") {
-      res.setHeader("Allow", ["DELETE", "POST"]);
-      return res
-        .status(405)
-        .json({ error: `Method ${req.method} Not Allowed` });
-    }
-  
-  const { shop, accessToken, productId } =
-      req.method === "DELETE" ? req.query : req.body;
-  
-    if (!shop || !accessToken || !productId) {
-      return res
-        .status(400)
-        .json({ error: "Missing shop, accessToken or productId" });
-    }
-  
-    
-    const apiVersion = "2025-07";
-    const url = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
-  
-    try {
-      const resp = await fetch(url, {
-        method: "DELETE",
-        headers: {
-          "X-Shopify-Access-Token": accessToken,
-          "Content-Type": "application/json",
-        },
-      });
-  
-      if (resp.status === 200) {
-        
-        return res.status(200).json({ success: true });
-      }
-  
-      
-      const detail = await resp.text();
-      return res
-        .status(resp.status)
-        .json({ error: "Failed to delete product", detail });
-    } catch (err) {
-      console.error(err);
-      return res
-        .status(500)
-        .json({ error: err.message || "Unexpected server error" });
-    }
-  }
-  
-
-// export async function updateProductMetadata(req, res) {
-//     if (req.method !== "POST") {
-//       res.setHeader("Allow", ["POST"]);
-//       return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
-//     }
-  
-//     const { shop, accessToken, productId, metadata } = req.body || {};
-//     if (!shop || !accessToken || !productId || !metadata) {
-//       return res.status(400).json({ error: "Missing required parameters" });
-//     }
-  
-//     try {
-//       const apiVersion = "2025-07";
-//       const metafields = [
-//         {
-//           namespace: "hs_code",
-//           key: "suggested_code",
-//           value: metadata.suggestedCode,
-//           type: "single_line_text_field"
-//         },
-//         {
-//           namespace: "hs_code", 
-//           key: "confidence",
-//           value: metadata.confidence.toString(),
-//           type: "number_integer"
-//         },
-//         {
-//           namespace: "hs_code",
-//           key: "alternative_codes",
-//           value: JSON.stringify(metadata.alternativeCodes),
-//           type: "json"
-//         },
-//         {
-//           namespace: "hs_code",
-//           key: "status",
-//           value: "approved",
-//           type: "single_line_text_field"
-//         }
-//       ];
-  
-//       // console.log("Creating metafields for product:", productId);
-//       // console.log("Metafields to create:", JSON.stringify(metafields, null, 2));
-  
-//       // Create each metafield separately
-//       for (const metafield of metafields) {
-//         const url = `https://${shop}/admin/api/${apiVersion}/products/${productId}/metafields.json`;
-        
-//         const response = await fetch(url, {
-//           method: "POST",
-//           headers: {
-//             "X-Shopify-Access-Token": accessToken,
-//             "Content-Type": "application/json",
-//           },
-//           body: JSON.stringify({ metafield }),
-//         });
-  
-//         if (!response.ok) {
-//           const detail = await response.text();
-//           console.error(`Failed to create metafield ${metafield.key}:`, detail);
-//         }
-//         //  else {
-//         //   const result = await response.json();
-//         //   console.log(`Successfully created metafield ${metafield.key}:`, JSON.stringify(result, null, 2));
-//         // }
-//       }
-  
-//       // console.log("Metadata update completed successfully");
-//       return res.status(200).json({ success: true });
-//     } catch (err) {
-//       console.error("Error in updateProductMetadata:", err);
-//       return res.status(500).json({ error: err.message || "Unexpected server error" });
-//     }
-//   }
-  
-export async function updateProductMetadata(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  const { shop, accessToken, productId, metadata } = req.body || {};
-  if (!shop || !accessToken || !productId || !metadata) {
+  const { shop, accessToken, productId, productData } = req.body || {};
+  if (!shop || !accessToken || !productId || !productData) {
     return res.status(400).json({ error: "Missing required parameters" });
   }
 
   try {
-    const apiVersion = "2025-07";
-    const url = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
-
-    const getResponse = await fetch(url, {
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!getResponse.ok) {
-      const detail = await getResponse.text();
-      return res.status(500).json({ error: "Failed to fetch current product", detail });
-    }
-
-    const currentProduct = await getResponse.json();
-    const existingTags = currentProduct.product.tags ? currentProduct.product.tags.split(',').map(tag => tag.trim()) : [];
+    const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
+    const numericId = productId.replace('gid://shopify/Product/', '');
     
-    const filteredTags = existingTags.filter(tag => !tag.startsWith('hs_'));
-    const metadataTags = [
-      `hs_code_${metadata.suggestedCode}`,
-      `hs_confidence_${metadata.confidence}`,
-      `hs_status_${metadata.status || 'pending'}`
-    ];
+    // Handle image removal first
+    if (productData.removeImages && productData.removeImages.length > 0) {
+      // Get current product images to find the correct image IDs
+      const imagesUrl = `https://${shop}/admin/api/2024-04/products/${numericId}/images.json`;
+      const imagesResponse = await fetch(imagesUrl, {
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+        }
+      });
+      
+      if (imagesResponse.ok) {
+        const imagesData = await imagesResponse.json();
+        const currentImages = imagesData.images || [];
+        
+        for (const imageIdToRemove of productData.removeImages) {
+          // Find the image by matching URL or ID
+          const imageToDelete = currentImages.find(img => 
+            img.src.includes(imageIdToRemove) || img.id.toString() === imageIdToRemove
+          );
+          
+          if (imageToDelete) {
+            const deleteUrl = `https://${shop}/admin/api/2024-04/products/${numericId}/images/${imageToDelete.id}.json`;
+            
+            const deleteResponse = await fetch(deleteUrl, {
+              method: 'DELETE',
+              headers: {
+                'X-Shopify-Access-Token': accessToken,
+              }
+            });
 
-    const newTags = [...filteredTags, ...metadataTags];
-
-    const updatePayload = {
-      product: {
-        tags: newTags.join(', ')
+            if (!deleteResponse.ok) {
+              console.error("Failed to delete image:", await deleteResponse.text());
+            }
+          }
+        }
       }
-    };
-
-    const response = await fetch(url, {
-      method: "PUT",
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(updatePayload),
-    });
-
-    if (!response.ok) {
-      const detail = await response.text();
-      return res.status(500).json({ error: "Failed to update product tags", detail });
     }
 
-    return res.status(200).json({ success: true });
+    // Handle image uploads using REST API
+    if (productData.media && productData.media.length > 0) {
+      for (const mediaItem of productData.media) {
+        if (mediaItem.originalSource && mediaItem.originalSource.startsWith('data:')) {
+          const base64Data = mediaItem.originalSource.split(',')[1];
+          const restUrl = `https://${shop}/admin/api/2024-04/products/${numericId}/images.json`;
+          
+          const imageResponse = await fetch(restUrl, {
+            method: 'POST',
+            headers: {
+              'X-Shopify-Access-Token': accessToken,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              image: {
+                attachment: base64Data,
+                alt: mediaItem.alt || ""
+              }
+            })
+          });
+
+          if (!imageResponse.ok) {
+            console.error("Failed to upload image:", await imageResponse.text());
+          }
+        }
+      }
+    }
+
+    // Update basic product info using GraphQL
+    const updateMutation = `
+      mutation productUpdate($input: ProductInput!) {
+        productUpdate(input: $input) {
+          product {
+            id
+            title
+            vendor
+            productType
+            descriptionHtml
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const input = { id: gid };
+    if (productData.title) input.title = productData.title;
+    if (productData.body_html) input.descriptionHtml = productData.body_html;
+    if (productData.vendor) input.vendor = productData.vendor;
+    if (productData.product_type) input.productType = productData.product_type;
+
+    const updateData = await graphqlRequest(shop, accessToken, updateMutation, { input });
+
+    if (updateData.productUpdate.userErrors && updateData.productUpdate.userErrors.length > 0) {
+      console.error("GraphQL errors:", updateData.productUpdate.userErrors);
+      return res.status(400).json({ 
+        error: "Update failed", 
+        details: updateData.productUpdate.userErrors 
+      });
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      product: updateData.productUpdate.product 
+    });
   } catch (err) {
-    console.error("Error in updateProductMetadata:", err);
+    console.error("Error in updateProductID:", err);
     return res.status(500).json({ error: err.message || "Unexpected server error" });
   }
 }
 
 
+export async function createProduct(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
+  }
 
+  const { shop, accessToken, productData } = req.body || {};
+  if (!shop || !accessToken || !productData) {
+    return res.status(400).json({ error: "Missing required parameters" });
+  }
+
+  try {
+    const mutation = `
+      mutation productCreate($input: ProductInput!) {
+        productCreate(input: $input) {
+          product {
+            id
+            title
+            handle
+            status
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const input = {
+      title: productData.title || "New Product",
+      descriptionHtml: productData.body_html || "",
+      vendor: productData.vendor || "",
+      productType: productData.product_type || "",
+      status: "ACTIVE",
+      variants: [{
+        price: productData.price || "0.00",
+        sku: productData.sku || "",
+        inventoryManagement: "SHOPIFY"
+      }]
+    };
+
+    const data = await graphqlRequest(shop, accessToken, mutation, { input });
+
+    if (data.productCreate.userErrors && data.productCreate.userErrors.length > 0) {
+      return res.status(400).json({ 
+        error: "Create failed", 
+        details: data.productCreate.userErrors 
+      });
+    }
+
+    const createdProduct = data.productCreate.product;
+    const productId = createdProduct.id.replace('gid://shopify/Product/', '');
+
+    // Handle image uploads if provided
+    if (productData.media && productData.media.length > 0) {
+      for (const mediaItem of productData.media) {
+        if (mediaItem.originalSource && mediaItem.originalSource.startsWith('data:')) {
+          const base64Data = mediaItem.originalSource.split(',')[1];
+          const restUrl = `https://${shop}/admin/api/2024-04/products/${productId}/images.json`;
+          
+          const imageResponse = await fetch(restUrl, {
+            method: 'POST',
+            headers: {
+              'X-Shopify-Access-Token': accessToken,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              image: {
+                attachment: base64Data,
+                alt: mediaItem.alt || ""
+              }
+            })
+          });
+
+          if (!imageResponse.ok) {
+            console.error("Failed to upload image:", await imageResponse.text());
+          }
+        }
+      }
+    }
+
+    return res.status(201).json({ 
+      success: true, 
+      product: createdProduct 
+    });
+  } catch (err) {
+    console.error("Error in createProduct:", err);
+    return res.status(500).json({ error: err.message || "Unexpected server error" });
+  }
+}
+
+
+export async function deleteProduct(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
+  }
+
+  const { shop, accessToken, productId } = req.body || {};
+  if (!shop || !accessToken || !productId) {
+    return res.status(400).json({ error: "Missing required parameters" });
+  }
+
+  try {
+    const mutation = `
+      mutation productDelete($input: ProductDeleteInput!) {
+        productDelete(input: $input) {
+          deletedProductId
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
+    
+    const data = await graphqlRequest(shop, accessToken, mutation, {
+      input: { id: gid }
+    });
+
+    if (data.productDelete.userErrors.length > 0) {
+      return res.status(400).json({ 
+        error: "Delete failed", 
+        details: data.productDelete.userErrors 
+      });
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      deletedProductId: data.productDelete.deletedProductId 
+    });
+  } catch (err) {
+    console.error("Error in deleteProduct:", err);
+    return res.status(500).json({ error: err.message || "Unexpected server error" });
+  }
+}
+
+export async function updateProductMetadata(req, res) {
+  return await updateProductID(req, res);
+}

@@ -40,12 +40,13 @@ app.get('/', (req, res) => {
 app.get('/api/esg-request-status/:userId/:productId', async (req, res) => {
   try {
     const { userId, productId } = req.params;
+    const numericId = productId.toString().replace('gid://shopify/Product/', '');
     
     const { data, error } = await supabase
       .from('esg_requests')
       .select('*')
       .eq('user_id', userId)
-      .eq('product_id', productId)
+      .or(`product_id.eq.${productId},product_id.eq.${numericId}`)
       .single();
     
     if (error && error.code !== 'PGRST116') {
@@ -71,11 +72,13 @@ app.post('/api/send-esg-request', async (req, res) => {
     }
     
     if (userId && productId) {
+      const numericId = productId.toString().replace('gid://shopify/Product/', '');
+      
       const { data: existingRequest } = await supabase
         .from('esg_requests')
         .select('*')
         .eq('user_id', userId)
-        .eq('product_id', productId)
+        .or(`product_id.eq.${productId},product_id.eq.${numericId}`)
         .single();
       
       if (existingRequest) {
@@ -108,6 +111,7 @@ app.post('/api/send-esg-request', async (req, res) => {
       
       if (error) {
         console.error('Error storing ESG request:', error);
+        return res.status(500).json({ error: 'Failed to store request in database' });
       }
     }
     

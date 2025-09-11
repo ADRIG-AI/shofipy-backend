@@ -30,16 +30,39 @@ export const webhookController = async (req, res) => {
         case 'checkout.session.completed': {
             if (!data.customer) break;
             
-            const customer = await stripe.customers.retrieve(data.customer);
-            
-            await supabase
-                .from('users')
-                .update({
-                    priceId: data.line_items?.data[0]?.price?.id,
-                    hasAccess: true,
-                    customerId: data.customer,
-                })
-                .eq('email', customer.email);
+            try {
+                const session = await stripe.checkout.sessions.retrieve(data.id, {
+                    expand: ['line_items']
+                });
+                
+                const customer = await stripe.customers.retrieve(data.customer);
+                const priceId = session.line_items?.data[0]?.price?.id;
+                
+                let subuserLimit = 1;
+                if (priceId === 'price_1RcnoUQiUhrwJo9CamPZGsh1' || priceId === 'price_1RcnosQiUhrwJo9CzIMCgiea') {
+                    subuserLimit = 1;
+                } else if (priceId === 'price_1RcnpzQiUhrwJo9CVz7Wsug6' || priceId === 'price_1RcnqKQiUhrwJo9CCdhvD8Ep') {
+                    subuserLimit = 5;
+                } else {
+                    subuserLimit = 999;
+                }
+                
+                const { error } = await supabase
+                    .from('users')
+                    .update({
+                        priceId: priceId,
+                        hasAccess: true,
+                        customerId: data.customer,
+                        subuser_limit: subuserLimit,
+                    })
+                    .eq('email', customer.email);
+                    
+                if (error) {
+                    console.error('Supabase update error:', error);
+                }
+            } catch (error) {
+                console.error('Webhook processing error:', error);
+            }
             break;
         }
         
