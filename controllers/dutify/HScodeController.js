@@ -9,6 +9,28 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+const graphqlRequest = async (shop, accessToken, query, variables = {}) => {
+  const response = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
+    method: 'POST',
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  if (result.errors) {
+    throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
+  }
+
+  return result.data;
+};
+
 export async function detectHSCode(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -128,31 +150,38 @@ export async function detectProductHSCode(req, res) {
   try {
     console.log(`Starting HS code detection for product ${productId}`);
     
-    // 1. Get product details from Shopify
-    const apiVersion = "2023-10";
-    const productUrl = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
+    // 1. Get product details from Shopify using GraphQL
+    const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
     
-    const productResponse = await fetch(productUrl, {
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-    });
+    const getProductQuery = `
+      query product($id: ID!) {
+        product(id: $id) {
+          id
+          title
+          descriptionHtml
+          productType
+        }
+      }
+    `;
 
-    if (!productResponse.ok) {
-      const errorText = await productResponse.text();
-      console.error(`Shopify API error: ${errorText}`);
-      return res.status(500).json({ 
-        error: `Failed to fetch product from Shopify: ${productResponse.status}`,
-        details: errorText
+    const productData = await graphqlRequest(shop, accessToken, getProductQuery, { id: gid });
+    const product = productData.product;
+    
+    if (!product) {
+      return res.status(404).json({ 
+        error: 'Product not found',
+        details: `Product with ID ${productId} not found`
       });
     }
 
-    const productData = await productResponse.json();
-    const product = productData.product;
     const productName = product.title;
-    const description = product.body_html ? product.body_html.replace(/<[^>]*>/g, '') : "No description available";
-    const category = product.product_type || "";
+    let description = product.descriptionHtml ? product.descriptionHtml.replace(/<[^>]*>/g, '').trim() : "";
+    const category = product.productType || "";
+    
+    // Ensure description is meaningful for Dutify API
+    if (!description || description.length < 10) {
+      description = `${productName} - ${category || 'product'} for classification`;
+    }
 
     // 2. Call Dutify API to detect HS code
     const apiKey = process.env.DUTIFY_API_KEY;
@@ -185,10 +214,11 @@ export async function detectProductHSCode(req, res) {
     const dutifyData = await dutifyResponse.json();
     console.log('Dutify API response:', JSON.stringify(dutifyData));
     
-    if (!dutifyResponse.ok) {
+    if (!dutifyResponse.ok || (dutifyData.data && dutifyData.data[0] && dutifyData.data[0].type === 'error')) {
       let errorMessage = 'Failed to detect HS code';
-      if (dutifyData.errors && dutifyData.errors.length > 0) {
-        errorMessage = dutifyData.errors[0].detail || errorMessage;
+      if (dutifyData.data && dutifyData.data[0] && dutifyData.data[0].type === 'error') {
+        const errors = dutifyData.data.filter(item => item.type === 'error');
+        errorMessage = errors.map(err => err.attributes.message).join(', ');
       }
       console.error(`Dutify API error: ${errorMessage}`);
       return res.status(500).json({ 
@@ -273,25 +303,25 @@ export async function saveProductHSCode(req, res) {
   }
 
   try {
-    // Get product details from Shopify to get description and category
-    const apiVersion = "2023-10";
-    const productUrl = `https://${shop}/admin/api/${apiVersion}/products/${productId}.json`;
+    const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
     
-    const productResponse = await fetch(productUrl, {
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-    });
+    // Get current product data using GraphQL
+    const getProductQuery = `
+      query product($id: ID!) {
+        product(id: $id) {
+          id
+          title
+          tags
+          descriptionHtml
+          productType
+        }
+      }
+    `;
 
-    if (!productResponse.ok) {
-      throw new Error("Failed to fetch product from Shopify");
-    }
-
-    const productData = await productResponse.json();
+    const productData = await graphqlRequest(shop, accessToken, getProductQuery, { id: gid });
     const product = productData.product;
-    const description = product.body_html ? product.body_html.replace(/<[^>]*>/g, '') : "";
-    const category = product.product_type || "";
+    const description = product.descriptionHtml ? product.descriptionHtml.replace(/<[^>]*>/g, '') : "";
+    const category = product.productType || "";
 
     // Save to Supabase
     const { data, error } = await supabase
@@ -325,39 +355,45 @@ export async function saveProductHSCode(req, res) {
         }]
       });
 
-    // Update product tags in Shopify
-    const existingTags = product.tags ? product.tags.split(',').map(tag => tag.trim()) : [];
+    // Update product tags using GraphQL
+    const existingTags = product.tags || [];
     const filteredTags = existingTags.filter(tag => 
       !tag.startsWith('hs_code_') && 
       !tag.startsWith('hs_confidence_') && 
       !tag.startsWith('hs_status_')
     );
     
-    // Add new HS code tags
     const newTags = [
       ...filteredTags,
       `hs_code_${hsCode}`,
       `hs_confidence_${confidence}`,
       `hs_status_${status}`
     ];
-    
-    // Update product with new tags
-    const updateResponse = await fetch(productUrl, {
-      method: 'PUT',
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        product: {
-          id: productId,
-          tags: newTags.join(', ')
+
+    const updateMutation = `
+      mutation productUpdate($id: ID!, $product: ProductInput!) {
+        productUpdate(id: $id, product: $product) {
+          product {
+            id
+            tags
+          }
+          userErrors {
+            field
+            message
+          }
         }
-      })
+      }
+    `;
+
+    const updateData = await graphqlRequest(shop, accessToken, updateMutation, {
+      id: gid,
+      product: {
+        tags: newTags
+      }
     });
-    
-    if (!updateResponse.ok) {
-      throw new Error("Failed to update product tags in Shopify");
+
+    if (updateData.productUpdate.userErrors && updateData.productUpdate.userErrors.length > 0) {
+      throw new Error(`GraphQL errors: ${JSON.stringify(updateData.productUpdate.userErrors)}`);
     }
 
     return res.status(200).json({

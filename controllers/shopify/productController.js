@@ -1,5 +1,5 @@
 const graphqlRequest = async (shop, accessToken, query, variables = {}) => {
-  const response = await fetch(`https://${shop}/admin/api/2024-04/graphql.json`, {
+  const response = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
     method: 'POST',
     headers: {
       'X-Shopify-Access-Token': accessToken,
@@ -247,8 +247,6 @@ export async function getProductID(req, res) {
                 sku
                 barcode
                 inventoryQuantity
-                weight
-                weightUnit
                 availableForSale
                 selectedOptions {
                   name
@@ -323,7 +321,7 @@ export async function updateProductID(req, res) {
     // Handle image removal first
     if (productData.removeImages && productData.removeImages.length > 0) {
       // Get current product images to find the correct image IDs
-      const imagesUrl = `https://${shop}/admin/api/2024-04/products/${numericId}/images.json`;
+      const imagesUrl = `https://${shop}/admin/api/2024-10/products/${numericId}/images.json`;
       const imagesResponse = await fetch(imagesUrl, {
         headers: {
           'X-Shopify-Access-Token': accessToken,
@@ -341,7 +339,7 @@ export async function updateProductID(req, res) {
           );
           
           if (imageToDelete) {
-            const deleteUrl = `https://${shop}/admin/api/2024-04/products/${numericId}/images/${imageToDelete.id}.json`;
+            const deleteUrl = `https://${shop}/admin/api/2024-10/products/${numericId}/images/${imageToDelete.id}.json`;
             
             const deleteResponse = await fetch(deleteUrl, {
               method: 'DELETE',
@@ -363,7 +361,7 @@ export async function updateProductID(req, res) {
       for (const mediaItem of productData.media) {
         if (mediaItem.originalSource && mediaItem.originalSource.startsWith('data:')) {
           const base64Data = mediaItem.originalSource.split(',')[1];
-          const restUrl = `https://${shop}/admin/api/2024-04/products/${numericId}/images.json`;
+          const restUrl = `https://${shop}/admin/api/2024-10/products/${numericId}/images.json`;
           
           const imageResponse = await fetch(restUrl, {
             method: 'POST',
@@ -388,8 +386,8 @@ export async function updateProductID(req, res) {
 
     // Update basic product info using GraphQL
     const updateMutation = `
-      mutation productUpdate($input: ProductInput!) {
-        productUpdate(input: $input) {
+      mutation productUpdate($id: ID!, $product: ProductInput!) {
+        productUpdate(id: $id, product: $product) {
           product {
             id
             title
@@ -405,13 +403,13 @@ export async function updateProductID(req, res) {
       }
     `;
 
-    const input = { id: gid };
-    if (productData.title) input.title = productData.title;
-    if (productData.body_html) input.descriptionHtml = productData.body_html;
-    if (productData.vendor) input.vendor = productData.vendor;
-    if (productData.product_type) input.productType = productData.product_type;
+    const productInput = {};
+    if (productData.title) productInput.title = productData.title;
+    if (productData.body_html) productInput.descriptionHtml = productData.body_html;
+    if (productData.vendor) productInput.vendor = productData.vendor;
+    if (productData.product_type) productInput.productType = productData.product_type;
 
-    const updateData = await graphqlRequest(shop, accessToken, updateMutation, { input });
+    const updateData = await graphqlRequest(shop, accessToken, updateMutation, { id: gid, product: productInput });
 
     if (updateData.productUpdate.userErrors && updateData.productUpdate.userErrors.length > 0) {
       console.error("GraphQL errors:", updateData.productUpdate.userErrors);
@@ -445,8 +443,8 @@ export async function createProduct(req, res) {
 
   try {
     const mutation = `
-      mutation productCreate($input: ProductInput!) {
-        productCreate(input: $input) {
+      mutation productCreate($product: ProductInput!) {
+        productCreate(product: $product) {
           product {
             id
             title
@@ -461,7 +459,7 @@ export async function createProduct(req, res) {
       }
     `;
 
-    const input = {
+    const productInput = {
       title: productData.title || "New Product",
       descriptionHtml: productData.body_html || "",
       vendor: productData.vendor || "",
@@ -474,7 +472,7 @@ export async function createProduct(req, res) {
       }]
     };
 
-    const data = await graphqlRequest(shop, accessToken, mutation, { input });
+    const data = await graphqlRequest(shop, accessToken, mutation, { product: productInput });
 
     if (data.productCreate.userErrors && data.productCreate.userErrors.length > 0) {
       return res.status(400).json({ 
@@ -491,7 +489,7 @@ export async function createProduct(req, res) {
       for (const mediaItem of productData.media) {
         if (mediaItem.originalSource && mediaItem.originalSource.startsWith('data:')) {
           const base64Data = mediaItem.originalSource.split(',')[1];
-          const restUrl = `https://${shop}/admin/api/2024-04/products/${productId}/images.json`;
+          const restUrl = `https://${shop}/admin/api/2024-10/products/${productId}/images.json`;
           
           const imageResponse = await fetch(restUrl, {
             method: 'POST',
@@ -538,8 +536,8 @@ export async function deleteProduct(req, res) {
 
   try {
     const mutation = `
-      mutation productDelete($input: ProductDeleteInput!) {
-        productDelete(input: $input) {
+      mutation productDelete($id: ID!) {
+        productDelete(id: $id) {
           deletedProductId
           userErrors {
             field
@@ -552,7 +550,7 @@ export async function deleteProduct(req, res) {
     const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
     
     const data = await graphqlRequest(shop, accessToken, mutation, {
-      input: { id: gid }
+      id: gid
     });
 
     if (data.productDelete.userErrors.length > 0) {
