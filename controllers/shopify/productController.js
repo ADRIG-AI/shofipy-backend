@@ -318,73 +318,7 @@ export async function updateProductID(req, res) {
     const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
     const numericId = productId.replace('gid://shopify/Product/', '');
     
-    // Handle image removal first
-    if (productData.removeImages && productData.removeImages.length > 0) {
-      // Get current product images to find the correct image IDs
-      const imagesUrl = `https://${shop}/admin/api/2024-10/products/${numericId}/images.json`;
-      const imagesResponse = await fetch(imagesUrl, {
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-        }
-      });
-      
-      if (imagesResponse.ok) {
-        const imagesData = await imagesResponse.json();
-        const currentImages = imagesData.images || [];
-        
-        for (const imageIdToRemove of productData.removeImages) {
-          // Find the image by matching URL or ID
-          const imageToDelete = currentImages.find(img => 
-            img.src.includes(imageIdToRemove) || img.id.toString() === imageIdToRemove
-          );
-          
-          if (imageToDelete) {
-            const deleteUrl = `https://${shop}/admin/api/2024-10/products/${numericId}/images/${imageToDelete.id}.json`;
-            
-            const deleteResponse = await fetch(deleteUrl, {
-              method: 'DELETE',
-              headers: {
-                'X-Shopify-Access-Token': accessToken,
-              }
-            });
-
-            if (!deleteResponse.ok) {
-              console.error("Failed to delete image:", await deleteResponse.text());
-            }
-          }
-        }
-      }
-    }
-
-    // Handle image uploads using REST API
-    if (productData.media && productData.media.length > 0) {
-      for (const mediaItem of productData.media) {
-        if (mediaItem.originalSource && mediaItem.originalSource.startsWith('data:')) {
-          const base64Data = mediaItem.originalSource.split(',')[1];
-          const restUrl = `https://${shop}/admin/api/2024-10/products/${numericId}/images.json`;
-          
-          const imageResponse = await fetch(restUrl, {
-            method: 'POST',
-            headers: {
-              'X-Shopify-Access-Token': accessToken,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              image: {
-                attachment: base64Data,
-                alt: mediaItem.alt || ""
-              }
-            })
-          });
-
-          if (!imageResponse.ok) {
-            console.error("Failed to upload image:", await imageResponse.text());
-          }
-        }
-      }
-    }
-
-    // Update basic product info using GraphQL
+    // Update product using GraphQL
     const updateMutation = `
       mutation productUpdate($id: ID!, $product: ProductInput!) {
         productUpdate(id: $id, product: $product) {
@@ -394,6 +328,19 @@ export async function updateProductID(req, res) {
             vendor
             productType
             descriptionHtml
+            media(first: 10) {
+              edges {
+                node {
+                  ... on MediaImage {
+                    id
+                    image {
+                      url
+                      altText
+                    }
+                  }
+                }
+              }
+            }
           }
           userErrors {
             field
@@ -408,6 +355,17 @@ export async function updateProductID(req, res) {
     if (productData.body_html) productInput.descriptionHtml = productData.body_html;
     if (productData.vendor) productInput.vendor = productData.vendor;
     if (productData.product_type) productInput.productType = productData.product_type;
+    if (productData.tags) productInput.tags = productData.tags;
+    if (productData.status) productInput.status = productData.status.toUpperCase();
+    
+    // Handle media updates using GraphQL
+    if (productData.media && productData.media.length > 0) {
+      productInput.media = productData.media.map(mediaItem => ({
+        originalSource: mediaItem.originalSource,
+        alt: mediaItem.alt || "",
+        mediaContentType: "IMAGE"
+      }));
+    }
 
     const updateData = await graphqlRequest(shop, accessToken, updateMutation, { id: gid, product: productInput });
 
@@ -471,6 +429,15 @@ export async function createProduct(req, res) {
         inventoryManagement: "SHOPIFY"
       }]
     };
+    
+    // Handle media creation using GraphQL
+    if (productData.media && productData.media.length > 0) {
+      productInput.media = productData.media.map(mediaItem => ({
+        originalSource: mediaItem.originalSource,
+        alt: mediaItem.alt || "",
+        mediaContentType: "IMAGE"
+      }));
+    }
 
     const data = await graphqlRequest(shop, accessToken, mutation, { product: productInput });
 
@@ -484,33 +451,7 @@ export async function createProduct(req, res) {
     const createdProduct = data.productCreate.product;
     const productId = createdProduct.id.replace('gid://shopify/Product/', '');
 
-    // Handle image uploads if provided
-    if (productData.media && productData.media.length > 0) {
-      for (const mediaItem of productData.media) {
-        if (mediaItem.originalSource && mediaItem.originalSource.startsWith('data:')) {
-          const base64Data = mediaItem.originalSource.split(',')[1];
-          const restUrl = `https://${shop}/admin/api/2024-10/products/${productId}/images.json`;
-          
-          const imageResponse = await fetch(restUrl, {
-            method: 'POST',
-            headers: {
-              'X-Shopify-Access-Token': accessToken,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              image: {
-                attachment: base64Data,
-                alt: mediaItem.alt || ""
-              }
-            })
-          });
 
-          if (!imageResponse.ok) {
-            console.error("Failed to upload image:", await imageResponse.text());
-          }
-        }
-      }
-    }
 
     return res.status(201).json({ 
       success: true, 
