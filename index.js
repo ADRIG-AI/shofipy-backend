@@ -33,7 +33,7 @@ app.use(bodyParser.json({ limit: '25mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '25mb' }));
 
 app.get('/auth/callback', callbackController);
-app.post('/auth/token', tokenController);
+app.post('/api/auth/token', tokenController);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Stripe webhook server is running!' });

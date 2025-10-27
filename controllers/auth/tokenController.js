@@ -22,7 +22,9 @@ export const tokenController = async (req, res) => {
             return res.status(500).json({ error: 'Server configuration error: Missing API credentials' });
         }
 
+        console.log('Attempting token exchange with:', { code: code?.substring(0, 10) + '...', shop, apiKey: apiKey?.substring(0, 10) + '...' });
         const tokenResponse = await exchangeCodeForToken(code, shop, apiKey, apiSecret);
+        console.log('Token exchange successful');
 
         const cookieOptions = {
             httpOnly: true,
@@ -35,7 +37,15 @@ export const tokenController = async (req, res) => {
 
         res.status(200).json({ success: true, access_token: tokenResponse.access_token });
     } catch (error) {
-        console.error('Token exchange error:', error);
-        res.status(500).json({ error: 'Failed to exchange token' });
+        console.error('Token exchange error:', {
+            message: error.message,
+            stack: error.stack,
+            code,
+            shop
+        });
+        res.status(500).json({ 
+            error: 'Failed to exchange token',
+            details: error.message 
+        });
     }
 };
