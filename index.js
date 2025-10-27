@@ -4,6 +4,7 @@ import bodyParser from 'body-parser';
 import apiRoutes from './routes/index.js';
 import { webhookController } from './controllers/webhook/stripeController.js';
 import { callbackController } from './controllers/auth/callbackController.js';
+import { tokenController } from './controllers/auth/tokenController.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import sendMailTo from './utils/sendMailTo.js';
@@ -32,6 +33,7 @@ app.use(bodyParser.json({ limit: '25mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '25mb' }));
 
 app.get('/auth/callback', callbackController);
+app.post('/auth/token', tokenController);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Stripe webhook server is running!' });
