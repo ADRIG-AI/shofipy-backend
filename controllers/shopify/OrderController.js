@@ -6,7 +6,7 @@ const graphqlRequest = async (shop, accessToken, query, variables = {}) => {
     variables
   });
 
-  const response = await fetch(`https://${shop}/admin/api/2025-07/graphql.json`, {
+  const response = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
     method: 'POST',
     headers: {
       'X-Shopify-Access-Token': accessToken,
