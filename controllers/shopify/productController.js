@@ -320,14 +320,23 @@ export async function updateProductID(req, res) {
     
     // Update product using GraphQL
     const updateMutation = `
-      mutation productUpdate($id: ID!, $product: ProductInput!) {
-        productUpdate(id: $id, product: $product) {
+      mutation productUpdate($product: ProductUpdateInput!) {
+        productUpdate(product: $product) {
           product {
             id
             title
             vendor
             productType
             descriptionHtml
+            variants(first: 50) {
+              edges {
+                node {
+                  id
+                  price
+                  sku
+                }
+              }
+            }
             media(first: 10) {
               edges {
                 node {
@@ -350,7 +359,7 @@ export async function updateProductID(req, res) {
       }
     `;
 
-    const productInput = {};
+    const productInput = { id: gid };
     if (productData.title) productInput.title = productData.title;
     if (productData.body_html) productInput.descriptionHtml = productData.body_html;
     if (productData.vendor) productInput.vendor = productData.vendor;
@@ -367,7 +376,7 @@ export async function updateProductID(req, res) {
       }));
     }
 
-    const updateData = await graphqlRequest(shop, accessToken, updateMutation, { id: gid, product: productInput });
+    const updateData = await graphqlRequest(shop, accessToken, updateMutation, { product: productInput });
 
     if (updateData.productUpdate.userErrors && updateData.productUpdate.userErrors.length > 0) {
       console.error("GraphQL errors:", updateData.productUpdate.userErrors);
@@ -375,6 +384,41 @@ export async function updateProductID(req, res) {
         error: "Update failed", 
         details: updateData.productUpdate.userErrors 
       });
+    }
+
+    // Update variants separately if provided
+    if (productData.variants && productData.variants.length > 0) {
+      const variantsToUpdate = productData.variants.filter(variant => variant.id);
+      if (variantsToUpdate.length > 0) {
+        const variantUpdateMutation = `
+          mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+              productVariants {
+                id
+                price
+                sku
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `;
+        
+        const variantInputs = variantsToUpdate.map(variant => ({
+          id: variant.id,
+          price: variant.price,
+          inventoryItem: {
+            sku: variant.sku
+          }
+        }));
+        
+        await graphqlRequest(shop, accessToken, variantUpdateMutation, { 
+          productId: gid, 
+          variants: variantInputs 
+        });
+      }
     }
 
     return res.status(200).json({ 

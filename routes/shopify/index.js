@@ -9,10 +9,12 @@ import { saveInvoice } from '../../controllers/shopify/InvoiceController.js';
 import { savePackingList } from '../../controllers/shopify/PackingListController.js';
 import { getDocument } from '../../controllers/shopify/DocumentController.js';
 import { processProductESG, getProductESGData, getESGSummary } from '../../controllers/shopify/esgController.js';
-
-
+ import billingRoutes from './billing.js';
 
 const router = express.Router();
+
+// Billing routes
+router.use('/billing', billingRoutes);
 
 router.post('/products', getProducts);
 router.post('/shop-info', getShopInfo);

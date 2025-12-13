@@ -16,7 +16,7 @@ export const getUser = async (req, res) => {
         if (type === 'admin') {
             const { data: userData, error } = await supabase
                 .from('users')
-                .select('priceId, hasAccess')
+                .select('"priceId", "hasAccess", plan_id, subscription_status')
                 .eq('id', userId)
                 .single();
                 
@@ -33,7 +33,7 @@ export const getUser = async (req, res) => {
             
             const { data: ownerData, error: ownerError } = await supabase
                 .from('users')
-                .select('priceId, hasAccess')
+                .select('"priceId", "hasAccess", plan_id, subscription_status')
                 .eq('id', subUserData.owner_id)
                 .single();
                 
