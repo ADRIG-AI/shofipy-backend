@@ -1,32 +1,56 @@
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+dotenv.config();
 
-export const getUserShop = async (req, res) => {
-  try {
-    const userId = req.user?.userId || req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+const getSupabaseClient = () => {
+    return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+};
+
+export const getUserShops = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const supabase = getSupabaseClient();
+        
+        const { data: shops, error } = await supabase
+            .from('shops')
+            .select('id, shopify_domain, created_at')
+            .eq('user_id', userId);
+            
+        if (error) return res.status(500).json({ error: error.message });
+        
+        res.json({ shops });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
+};
 
-    // Get shop information for the authenticated user
-    const { data: shopData, error } = await supabase
-      .from('shops')
-      .select('shopify_domain, shopify_access_token')
-      .eq('user_id', userId)
-      .single();
-
-    if (error || !shopData) {
-      return res.status(404).json({ error: 'No shop found for user' });
+export const selectShop = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { shopId } = req.body;
+        const supabase = getSupabaseClient();
+        
+        // Get shop details
+        const { data: shop, error } = await supabase
+            .from('shops')
+            .select('shopify_domain')
+            .eq('id', shopId)
+            .eq('user_id', userId)
+            .single();
+            
+        if (error || !shop) {
+            return res.status(404).json({ error: 'Shop not found' });
+        }
+        
+        // Update user's current store_url
+        await supabase
+            .from('users')
+            .update({ store_url: shop.shopify_domain })
+            .eq('id', userId);
+            
+        res.json({ success: true, selectedShop: shop.shopify_domain });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    res.status(200).json({
-      shop: shopData.shopify_domain,
-      hasAccessToken: !!shopData.shopify_access_token
-    });
-  } catch (error) {
-    console.error('Error fetching user shop:', error);
-    res.status(500).json({ error: 'Failed to fetch shop information' });
-  }
 };

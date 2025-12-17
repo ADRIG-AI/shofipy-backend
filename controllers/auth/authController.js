@@ -72,6 +72,7 @@ export const login = async (req, res) => {
 export const signup = async (req, res) => {
     try {
         const { name, email, password } = req.body;
+        
         const hashedPassword = await bcrypt.hash(password, 12);
         const supabase = getSupabaseClient();
         
@@ -89,7 +90,11 @@ export const signup = async (req, res) => {
             { expiresIn: '24h' }
         );
         
-        res.json({ token, user: { id: data.id, name: data.name, email: data.email, type: 'admin', role: 'admin' } });
+        res.json({ 
+            token, 
+            user: { id: data.id, name: data.name, email: data.email, type: 'admin', role: 'admin' },
+            requiresShopifyConnection: true
+        });
     } catch (error) {
         console.error('Signup error:', error);
         res.status(500).json({ error: 'Signup failed' });

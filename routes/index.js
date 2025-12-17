@@ -4,6 +4,7 @@ import shopifyRoutes from './shopify/index.js';
 import stripeRoutes from './stripe/index.js';
 import userRoutes from './user/index.js';
 import dutifyRoutes from './dutify/index.js';
+import { handleShopifyCallback } from '../controllers/user/userController.js';
 
 
 const router = express.Router();
@@ -21,5 +22,7 @@ router.use('/stripe', stripeRoutes);
 router.use('/user', userRoutes);
 
 router.use('/dutify', dutifyRoutes);
+
+
 
 export default router;
