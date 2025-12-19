@@ -406,11 +406,19 @@ export async function getOrderDetails(req, res) {
             zip
           }
         }
+        shop {
+          name
+          email
+          myshopifyDomain
+        }
       }
     `;
 
     const data = await graphqlRequest(shop, accessToken, orderQuery, { id: gid });
-    return res.status(200).json(data.order);
+    return res.status(200).json({
+      order: data.order,
+      shop: data.shop
+    });
   } catch (error) {
     console.error(error);
     
