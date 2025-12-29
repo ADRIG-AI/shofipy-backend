@@ -366,15 +366,6 @@ export async function updateProductID(req, res) {
     if (productData.product_type) productInput.productType = productData.product_type;
     if (productData.tags) productInput.tags = productData.tags;
     if (productData.status) productInput.status = productData.status.toUpperCase();
-    
-    // Handle media updates using GraphQL
-    if (productData.media && productData.media.length > 0) {
-      productInput.media = productData.media.map(mediaItem => ({
-        originalSource: mediaItem.originalSource,
-        alt: mediaItem.alt || "",
-        mediaContentType: "IMAGE"
-      }));
-    }
 
     const updateData = await graphqlRequest(shop, accessToken, updateMutation, { product: productInput });
 
@@ -444,14 +435,24 @@ export async function createProduct(req, res) {
   }
 
   try {
-    const mutation = `
-      mutation productCreate($product: ProductInput!) {
+    
+    
+    // Step 1: Create the product
+    const createMutation = `
+      mutation productCreate($product: ProductCreateInput!) {
         productCreate(product: $product) {
           product {
             id
             title
             handle
             status
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
           }
           userErrors {
             field
@@ -463,43 +464,237 @@ export async function createProduct(req, res) {
 
     const productInput = {
       title: productData.title || "New Product",
-      descriptionHtml: productData.body_html || "",
+      descriptionHtml: productData.body_html || productData.description || "",
       vendor: productData.vendor || "",
       productType: productData.product_type || "",
       status: "ACTIVE",
-      variants: [{
-        price: productData.price || "0.00",
-        sku: productData.sku || "",
-        inventoryManagement: "SHOPIFY"
-      }]
+      tags: productData.tags || []
     };
-    
-    // Handle media creation using GraphQL
-    if (productData.media && productData.media.length > 0) {
-      productInput.media = productData.media.map(mediaItem => ({
-        originalSource: mediaItem.originalSource,
-        alt: mediaItem.alt || "",
-        mediaContentType: "IMAGE"
-      }));
-    }
 
-    const data = await graphqlRequest(shop, accessToken, mutation, { product: productInput });
+    const createData = await graphqlRequest(shop, accessToken, createMutation, { product: productInput });
 
-    if (data.productCreate.userErrors && data.productCreate.userErrors.length > 0) {
+    if (createData.productCreate.userErrors && createData.productCreate.userErrors.length > 0) {
       return res.status(400).json({ 
         error: "Create failed", 
-        details: data.productCreate.userErrors 
+        details: createData.productCreate.userErrors 
       });
     }
 
-    const createdProduct = data.productCreate.product;
-    const productId = createdProduct.id.replace('gid://shopify/Product/', '');
-
-
-
+    const createdProduct = createData.productCreate.product;
+    const productId = createdProduct.id;
+    const variantId = createdProduct.variants.edges[0]?.node?.id;
+    
+    // Step 2: Update variant with price and SKU
+    if (variantId && (productData.price || productData.sku)) {
+      const variantUpdateMutation = `
+        mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            productVariants {
+              id
+              price
+              sku
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `;
+      
+      const variantInput = { id: variantId };
+      if (productData.price) variantInput.price = productData.price.toString();
+      if (productData.sku) {
+        variantInput.inventoryItem = { sku: productData.sku };
+      }
+      
+      await graphqlRequest(shop, accessToken, variantUpdateMutation, { 
+        productId, 
+        variants: [variantInput] 
+      });
+    }
+    
+    // Step 3: Upload and add images if provided
+    if (productData.media && productData.media.length > 0) {
+      try {
+        for (const image of productData.media) {
+          const source = image.originalSource || image.src || image.url;
+          
+          if (source && source.startsWith('data:')) {
+            // Handle base64 images by uploading to Shopify first
+            const base64Data = source.split(',')[1];
+            const mimeType = source.split(';')[0].split(':')[1];
+            const extension = mimeType.split('/')[1];
+            const filename = `image_${Date.now()}.${extension}`;
+            
+            // Step 3a: Create staged upload
+            const stagedUploadMutation = `
+              mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {
+                stagedUploadsCreate(input: $input) {
+                  stagedTargets {
+                    url
+                    resourceUrl
+                    parameters {
+                      name
+                      value
+                    }
+                  }
+                  userErrors {
+                    field
+                    message
+                  }
+                }
+              }
+            `;
+            
+            const stagedUploadResult = await graphqlRequest(shop, accessToken, stagedUploadMutation, {
+              input: [{
+                filename: filename,
+                mimeType: mimeType,
+                resource: "IMAGE",
+                httpMethod: "POST"
+              }]
+            });
+            
+            if (stagedUploadResult.stagedUploadsCreate.userErrors.length > 0) {
+              console.error('Staged upload errors:', stagedUploadResult.stagedUploadsCreate.userErrors);
+              continue;
+            }
+            
+            const stagedTarget = stagedUploadResult.stagedUploadsCreate.stagedTargets[0];
+            
+            // Step 3b: Upload file to staged URL
+            const formData = new FormData();
+            stagedTarget.parameters.forEach(param => {
+              formData.append(param.name, param.value);
+            });
+            
+            // Convert base64 to blob
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: mimeType });
+            formData.append('file', blob, filename);
+            
+            const uploadResponse = await fetch(stagedTarget.url, {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (!uploadResponse.ok) {
+              console.error('File upload failed:', uploadResponse.statusText);
+              continue;
+            }
+            
+            // Step 3c: Add uploaded image to product
+            const mediaMutation = `
+              mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+                productCreateMedia(productId: $productId, media: $media) {
+                  media {
+                    ... on MediaImage {
+                      id
+                      image {
+                        url
+                      }
+                    }
+                  }
+                  mediaUserErrors {
+                    field
+                    message
+                  }
+                }
+              }
+            `;
+            
+            await graphqlRequest(shop, accessToken, mediaMutation, {
+              productId,
+              media: [{
+                originalSource: stagedTarget.resourceUrl,
+                alt: image.alt || "",
+                mediaContentType: "IMAGE"
+              }]
+            });
+            
+          } else if (source && (source.startsWith('http://') || source.startsWith('https://'))) {
+            // Handle direct URLs
+            const mediaMutation = `
+              mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+                productCreateMedia(productId: $productId, media: $media) {
+                  media {
+                    ... on MediaImage {
+                      id
+                      image {
+                        url
+                      }
+                    }
+                  }
+                  mediaUserErrors {
+                    field
+                    message
+                  }
+                }
+              }
+            `;
+            
+            await graphqlRequest(shop, accessToken, mediaMutation, {
+              productId,
+              media: [{
+                originalSource: source,
+                alt: image.alt || "",
+                mediaContentType: "IMAGE"
+              }]
+            });
+          }
+        }
+      } catch (mediaError) {
+        console.error('Media upload failed:', mediaError);
+      }
+    }
+    
+    // Step 4: Get the complete product data to return
+    const finalQuery = `
+      query product($id: ID!) {
+        product(id: $id) {
+          id
+          title
+          handle
+          status
+          vendor
+          productType
+          descriptionHtml
+          variants(first: 1) {
+            edges {
+              node {
+                id
+                price
+                sku
+              }
+            }
+          }
+          media(first: 10) {
+            edges {
+              node {
+                ... on MediaImage {
+                  id
+                  image {
+                    url
+                    altText
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+    
+    const finalData = await graphqlRequest(shop, accessToken, finalQuery, { id: productId });
+    
     return res.status(201).json({ 
       success: true, 
-      product: createdProduct 
+      product: finalData.product 
     });
   } catch (err) {
     console.error("Error in createProduct:", err);
@@ -521,8 +716,8 @@ export async function deleteProduct(req, res) {
 
   try {
     const mutation = `
-      mutation productDelete($id: ID!) {
-        productDelete(id: $id) {
+      mutation productDelete($input: ProductDeleteInput!) {
+        productDelete(input: $input) {
           deletedProductId
           userErrors {
             field
@@ -535,7 +730,7 @@ export async function deleteProduct(req, res) {
     const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
     
     const data = await graphqlRequest(shop, accessToken, mutation, {
-      id: gid
+      input: { id: gid }
     });
 
     if (data.productDelete.userErrors.length > 0) {
