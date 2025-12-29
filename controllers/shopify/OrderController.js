@@ -394,8 +394,19 @@ export async function getOrderDetails(req, res) {
     `;
 
     const data = await graphqlRequest(shop, accessToken, orderQuery, { id: gid });
+    
+    // Map customer details from shipping/billing address since we can't access customer field
+    const customerFromAddress = {
+      firstName: data.order.shippingAddress?.firstName || data.order.billingAddress?.firstName || '',
+      lastName: data.order.shippingAddress?.lastName || data.order.billingAddress?.lastName || '',
+      email: data.order.email || ''
+    };
+    
     return res.status(200).json({
-      order: data.order,
+      order: {
+        ...data.order,
+        customer: customerFromAddress
+      },
       shop: data.shop
     });
   } catch (error) {
