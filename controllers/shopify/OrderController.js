@@ -49,12 +49,9 @@ export async function getAllOrders(req, res) {
   }
 
   try {
-    const today = new Date().toISOString().split('T')[0];
-    console.log('Filtering orders before:', today);
-    
     const query = `
       query {
-        orders(first: 250, query: "created_at:<${today}") {
+        orders(first: 250) {
           edges {
             node {
               id
@@ -82,12 +79,6 @@ export async function getAllOrders(req, res) {
               }
               displayFulfillmentStatus
               displayFinancialStatus
-              customer {
-                id
-                firstName
-                lastName
-                email
-              }
               shippingAddress {
                 firstName
                 lastName
@@ -188,12 +179,6 @@ export async function getOrderById(req, res) {
           }
           displayFulfillmentStatus
           displayFinancialStatus
-          customer {
-            id
-            firstName
-            lastName
-            email
-          }
           lineItems(first: 50) {
             edges {
               node {
@@ -356,12 +341,6 @@ export async function getOrderDetails(req, res) {
           }
           displayFulfillmentStatus
           displayFinancialStatus
-          customer {
-            id
-            firstName
-            lastName
-            email
-          }
           lineItems(first: 50) {
             edges {
               node {

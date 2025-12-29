@@ -27,7 +27,7 @@ const CREATE_SUBSCRIPTION_MUTATION = `
 const BILLING_PLANS = {
     starter: {
         name: 'Starter Plan',
-        price: 29.00,
+        price: 1.00,
         interval: 'EVERY_30_DAYS',
         subuserLimit: 1
     },
