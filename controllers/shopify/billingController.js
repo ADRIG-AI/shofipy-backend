@@ -24,6 +24,33 @@ const CREATE_SUBSCRIPTION_MUTATION = `
     }
 `;
 
+const CANCEL_SUBSCRIPTION_MUTATION = `
+    mutation appSubscriptionCancel($id: ID!) {
+        appSubscriptionCancel(id: $id) {
+            userErrors {
+                field
+                message
+            }
+            appSubscription {
+                id
+                status
+            }
+        }
+    }
+`;
+
+const GET_SUBSCRIPTION_QUERY = `
+    query getAppSubscription($id: ID!) {
+        node(id: $id) {
+            ... on AppSubscription {
+                id
+                status
+                test
+            }
+        }
+    }
+`;
+
 const BILLING_PLANS = {
     starter: {
         name: 'Starter Plan',
@@ -78,7 +105,7 @@ export const createSubscription = async (req, res) => {
         const variables = {
             name: plan.name,
             returnUrl,
-            test: process.env.NODE_ENV !== 'production',
+            test: process.env.NODE_ENV === 'development',
             lineItems: [{
                 plan: {
                     appRecurringPricingDetails: {
@@ -206,6 +233,43 @@ export const cancelSubscription = async (req, res) => {
             return res.status(401).json({ error: 'User not authenticated' });
         }
 
+        // Get user's subscription and shop info
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select(`
+                shopify_subscription_id,
+                shops!inner(shopify_domain, shopify_access_token)
+            `)
+            .eq('id', userId)
+            .single();
+
+        if (userError || !user || !user.shopify_subscription_id) {
+            return res.status(400).json({ error: 'No active subscription found' });
+        }
+
+        const shop = user.shops;
+        
+        // Cancel subscription in Shopify
+        const response = await fetch(`https://${shop.shopify_domain}/admin/api/2025-10/graphql.json`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Access-Token': shop.shopify_access_token,
+            },
+            body: JSON.stringify({
+                query: CANCEL_SUBSCRIPTION_MUTATION,
+                variables: { id: user.shopify_subscription_id }
+            }),
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.data?.appSubscriptionCancel?.userErrors?.length > 0) {
+                console.error('Shopify cancellation errors:', result.data.appSubscriptionCancel.userErrors);
+            }
+        }
+
+        // Update database regardless of Shopify API result
         const { error: updateError } = await supabase
             .from('users')
             .update({

@@ -7,8 +7,9 @@ const supabase = createClient(
 );
 
 const verifyShopifyWebhook = (data, hmacHeader) => {
-    if (!process.env.SHOPIFY_WEBHOOK_SECRET || process.env.NODE_ENV === 'development') {
-        return true; // Skip verification in development
+    if (!process.env.SHOPIFY_WEBHOOK_SECRET) {
+        console.warn('SHOPIFY_WEBHOOK_SECRET not set - webhook verification disabled');
+        return process.env.NODE_ENV === 'development';
     }
     
     const calculated_hmac = crypto
@@ -68,10 +69,10 @@ export const handleSubscriptionCallback = async (req, res) => {
             return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/billing?error=missing_subscription_id`);
         }
 
-        // Find user by subscription ID (handle both GID format and plain ID)
+        // Find user by subscription ID with multiple lookup strategies
         let user, findError;
         
-        // First try exact match
+        // Strategy 1: Exact match
         const { data: userData1, error: error1 } = await supabase
             .from('users')
             .select('id, plan_id, subscription_status')
@@ -81,15 +82,30 @@ export const handleSubscriptionCallback = async (req, res) => {
         if (userData1) {
             user = userData1;
         } else {
-            // Try to find by matching the ID part of the GID
+            // Strategy 2: Match by GID format (gid://shopify/AppSubscription/ID)
             const { data: userData2, error: error2 } = await supabase
                 .from('users')
                 .select('id, plan_id, subscription_status, shopify_subscription_id')
                 .like('shopify_subscription_id', `%${subscriptionIdToUse}%`)
                 .single();
                 
-            user = userData2;
-            findError = error2;
+            if (userData2) {
+                user = userData2;
+            } else {
+                // Strategy 3: Extract ID from GID and match
+                const idMatch = subscriptionIdToUse.match(/\d+$/);
+                if (idMatch) {
+                    const { data: userData3, error: error3 } = await supabase
+                        .from('users')
+                        .select('id, plan_id, subscription_status, shopify_subscription_id')
+                        .like('shopify_subscription_id', `%${idMatch[0]}%`)
+                        .single();
+                    user = userData3;
+                    findError = error3;
+                } else {
+                    findError = error2;
+                }
+            }
         }
 
         if (findError || !user) {
