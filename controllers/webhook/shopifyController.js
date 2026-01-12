@@ -66,7 +66,7 @@ export const handleSubscriptionCallback = async (req, res) => {
         
         if (!subscriptionIdToUse) {
             console.error('No subscription ID provided in callback');
-            return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/billing?error=missing_subscription_id`);
+            return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}billing?error=missing_subscription_id`);
         }
 
         // Find user by subscription ID with multiple lookup strategies
@@ -110,7 +110,7 @@ export const handleSubscriptionCallback = async (req, res) => {
 
         if (findError || !user) {
             console.error('User not found for subscription:', subscriptionIdToUse, findError);
-            return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/billing?error=user_not_found`);
+            return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}billing?error=user_not_found`);
         }
 
         console.log('Found user for subscription:', user.id, 'current status:', user.subscription_status);
@@ -128,13 +128,13 @@ export const handleSubscriptionCallback = async (req, res) => {
 
         if (updateError) {
             console.error('Failed to activate subscription:', updateError);
-            return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/billing?error=activation_failed`);
+            return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}billing?error=activation_failed`);
         }
 
         console.log('Subscription activated successfully for user:', user.id);
-        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/billing?success=true&plan=${user.plan_id}`);
+        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}billing?success=true&plan=${user.plan_id}`);
     } catch (error) {
         console.error('Callback error:', error);
-        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/billing?error=callback_failed`);
+        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}billing?error=callback_failed`);
     }
 };

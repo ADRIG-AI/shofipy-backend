@@ -60,7 +60,7 @@ const BILLING_PLANS = {
     },
     professional: {
         name: 'Professional Plan', 
-        price: 99.00,
+        price: 25.00,
         interval: 'EVERY_30_DAYS',
         subuserLimit: 5
     },
@@ -100,7 +100,7 @@ export const createSubscription = async (req, res) => {
         }
 
         const plan = BILLING_PLANS[planId];
-        const returnUrl = `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/shopify/billing/callback`;
+        const returnUrl = `${process.env.BACKEND_URL || 'http://localhost:3000'}api/shopify/billing/callback`;
 
         const variables = {
             name: plan.name,
