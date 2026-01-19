@@ -139,3 +139,6 @@ app.listen(port, () => {
   console.log(`🧪 Health check:     http://localhost:${port}/`);
   console.log(`📬 Webhook endpoint: http://localhost:${port}/api/webhook`);
 });
+
+// Export for Vercel serverless
+export default app;
