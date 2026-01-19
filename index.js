@@ -133,9 +133,15 @@ app.post('/api/send-esg-request', async (req, res) => {
 // Mount API routes AFTER ESG endpoints
 app.use('/api', apiRoutes);
 
-app.listen(port, () => {
-  console.log(`🚀 Server is running on http://localhost:${port}`);
-  console.log(`🧪 Health check:     http://localhost:${port}/`);
-  console.log(`📬 Webhook endpoint: http://localhost:${port}/api/webhook`);
-});
+// Only listen when not in Vercel serverless environment
+if (process.env.VERCEL !== '1') {
+  app.listen(port, () => {
+    console.log(`🚀 Server is running on http://localhost:${port}`);
+    console.log(`🧪 Health check:     http://localhost:${port}/`);
+    console.log(`📬 Webhook endpoint: http://localhost:${port}/api/webhook`);
+  });
+}
+
+// Export for Vercel serverless
+export default app;
 
