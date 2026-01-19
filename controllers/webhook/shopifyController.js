@@ -1,10 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
-);
+function getSupabaseClient() {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+        throw new Error('Missing required Supabase environment variables');
+    }
+    return createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_ANON_KEY
+    );
+}
 
 const verifyShopifyWebhook = (data, hmacHeader) => {
     if (!process.env.SHOPIFY_WEBHOOK_SECRET) {
@@ -36,6 +41,7 @@ export const handleSubscriptionUpdate = async (req, res) => {
         const subscriptionId = subscription.id;
         const status = subscription.status;
 
+        const supabase = getSupabaseClient();
         // Update user subscription status
         const { error } = await supabase
             .from('users')
@@ -69,6 +75,7 @@ export const handleSubscriptionCallback = async (req, res) => {
             return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}billing?error=missing_subscription_id`);
         }
 
+        const supabase = getSupabaseClient();
         // Find user by subscription ID with multiple lookup strategies
         let user, findError;
         

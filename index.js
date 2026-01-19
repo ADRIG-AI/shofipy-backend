@@ -17,13 +17,7 @@ const port = process.env.PORT || 3000;
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 const corsOptions = {
-  origin: [
-    'http://localhost:8080',
-    'https://shopify-frontend-pearl.vercel.app',
-    'https://shopify-frontend-rouge.vercel.app',
-    'https://www.shopifyq.com',
-    'https://dagala-analytics.vercel.app'
-  ],
+  origin: true, // Allow all origins for debugging
   credentials: true,
 };
 app.use(cors(corsOptions));
@@ -38,6 +32,11 @@ app.post('/auth/token', tokenController);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Stripe webhook server is running!' });
+});
+
+// Debug endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Backend is reachable', timestamp: new Date().toISOString() });
 });
 
 // ESG endpoints - BEFORE mounting /api routes
@@ -139,3 +138,4 @@ app.listen(port, () => {
   console.log(`🧪 Health check:     http://localhost:${port}/`);
   console.log(`📬 Webhook endpoint: http://localhost:${port}/api/webhook`);
 });
+
