@@ -15,6 +15,9 @@ router.use('/auth', authRoutes);
 // Mount shopify routes
 router.use('/shopify', shopifyRoutes);
 
+// Test route to verify API is working
+router.get('/test', (req, res) => res.json({ message: 'API working' }));
+
 // Mount stripe routes
 router.use('/stripe', stripeRoutes);
 
