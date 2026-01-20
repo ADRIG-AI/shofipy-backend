@@ -17,13 +17,7 @@ const port = process.env.PORT || 3000;
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 const corsOptions = {
-  origin: [
-    'http://localhost:8080',
-    'https://shopify-frontend-pearl.vercel.app',
-    'https://shopify-frontend-rouge.vercel.app',
-    'https://www.shopifyq.com',
-    'https://dagala-analytics.vercel.app'
-  ],
+  origin: true, // Allow all origins for debugging
   credentials: true,
 };
 app.use(cors(corsOptions));
@@ -38,6 +32,11 @@ app.post('/auth/token', tokenController);
 
 app.get('/', (req, res) => {
   res.json({ status: 'Stripe webhook server is running!' });
+});
+
+// Debug endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Backend is reachable', timestamp: new Date().toISOString() });
 });
 
 // ESG endpoints - BEFORE mounting /api routes
@@ -134,11 +133,14 @@ app.post('/api/send-esg-request', async (req, res) => {
 // Mount API routes AFTER ESG endpoints
 app.use('/api', apiRoutes);
 
-app.listen(port, () => {
-  console.log(`🚀 Server is running on http://localhost:${port}`);
-  console.log(`🧪 Health check:     http://localhost:${port}/`);
-  console.log(`📬 Webhook endpoint: http://localhost:${port}/api/webhook`);
-});
+// Only listen when not in Vercel serverless environment
+if (process.env.VERCEL !== '1') {
+  app.listen(port, () => {
+    console.log(`🚀 Server is running on http://localhost:${port}`);
+    console.log(`🧪 Health check:     http://localhost:${port}/`);
+    console.log(`📬 Webhook endpoint: http://localhost:${port}/api/webhook`);
+  });
+}
 
 // Export for Vercel serverless
 export default app;

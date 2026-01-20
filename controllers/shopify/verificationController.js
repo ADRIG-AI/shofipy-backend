@@ -1,9 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
-);
+function getSupabaseClient() {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+        throw new Error('Missing required Supabase environment variables');
+    }
+    return createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_ANON_KEY
+    );
+}
 
 const GET_SUBSCRIPTION_QUERY = `
     query getAppSubscription($id: ID!) {
@@ -37,6 +42,7 @@ export const verifyBillingSetup = async (req, res) => {
     try {
         const { userId } = req.user;
 
+        const supabase = getSupabaseClient();
         const { data: user, error: userError } = await supabase
             .from('users')
             .select(`
