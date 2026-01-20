@@ -22,7 +22,12 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-app.post('/api/webhook', express.raw({ type: 'application/json' }), webhookController);
+// Determine API prefix based on environment
+// Vercel's /api directory already provides /api prefix
+const isVercel = process.env.VERCEL === '1';
+const apiPrefix = isVercel ? '' : '/api';
+
+app.post(`${apiPrefix}/webhook`, express.raw({ type: 'application/json' }), webhookController);
 
 app.use(bodyParser.json({ limit: '25mb' })); 
 app.use(bodyParser.urlencoded({ extended: true, limit: '25mb' }));
@@ -35,12 +40,12 @@ app.get('/', (req, res) => {
 });
 
 // Debug endpoint
-app.get('/api/test', (req, res) => {
+app.get(`${apiPrefix}/test`, (req, res) => {
   res.json({ message: 'Backend is reachable', timestamp: new Date().toISOString() });
 });
 
 // Debug endpoint to list all routes
-app.get('/api/debug/routes', (req, res) => {
+app.get(`${apiPrefix}/debug/routes`, (req, res) => {
   const routes = [];
   const addRoutes = (stack, prefix = '') => {
     stack.forEach(middleware => {
@@ -65,7 +70,7 @@ app.get('/api/debug/routes', (req, res) => {
 });
 
 // ESG endpoints - BEFORE mounting /api routes
-app.get('/api/esg-request-status/:userId/:productId', async (req, res) => {
+app.get(`${apiPrefix}/esg-request-status/:userId/:productId`, async (req, res) => {
   try {
     const { userId, productId } = req.params;
     const numericId = productId.toString().replace('gid://shopify/Product/', '');
@@ -91,7 +96,7 @@ app.get('/api/esg-request-status/:userId/:productId', async (req, res) => {
   }
 });
 
-app.post('/api/send-esg-request', async (req, res) => {
+app.post(`${apiPrefix}/send-esg-request`, async (req, res) => {
   try {
     const { vendorEmail, productName, vendorName, userId, productId } = req.body;
     
@@ -156,7 +161,7 @@ app.post('/api/send-esg-request', async (req, res) => {
 });
 
 // Mount API routes AFTER ESG endpoints
-app.use('/api', apiRoutes);
+app.use(apiPrefix, apiRoutes);
 
 // Only listen when not in Vercel serverless environment
 if (process.env.VERCEL !== '1') {
