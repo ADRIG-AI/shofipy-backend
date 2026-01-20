@@ -16,5 +16,6 @@ router.get('/verify-setup', authenticateToken, verifyBillingSetup);
 router.get('/test-webhook', testWebhookEndpoint);
 router.post('/webhook/subscription-update', handleSubscriptionUpdate);
 router.get('/callback', handleSubscriptionCallback);
+router.get('/test', (req, res) => res.json({ message: 'Billing routes working' }));
 
 export default router;
