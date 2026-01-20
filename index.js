@@ -22,10 +22,9 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Determine API prefix based on environment
-// Vercel's /api directory already provides /api prefix
-const isVercel = process.env.VERCEL === '1';
-const apiPrefix = isVercel ? '' : '/api';
+// Use a consistent prefix so Vercel serverless (which keeps the /api segment
+// in the incoming path) and local dev both match the same route shapes.
+const apiPrefix = '/api';
 
 app.post(`${apiPrefix}/webhook`, express.raw({ type: 'application/json' }), webhookController);
 
