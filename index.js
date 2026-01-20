@@ -39,6 +39,31 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend is reachable', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint to list all routes
+app.get('/api/debug/routes', (req, res) => {
+  const routes = [];
+  const addRoutes = (stack, prefix = '') => {
+    stack.forEach(middleware => {
+      if (middleware.route) {
+        // Regular route
+        const methods = Object.keys(middleware.route.methods).map(m => m.toUpperCase()).join(', ');
+        routes.push(`${methods} ${prefix}${middleware.route.path}`);
+      } else if (middleware.name === 'router' && middleware.handle.stack) {
+        // Nested router
+        const path = middleware.regexp.source
+          .replace('\\/?', '')
+          .replace('(?=\\/|$)', '')
+          .replace(/\\\//g, '/')
+          .replace(/\^/g, '')
+          .replace(/\$/g, '');
+        addRoutes(middleware.handle.stack, prefix + path);
+      }
+    });
+  };
+  addRoutes(app._router.stack);
+  res.json({ routes: routes.sort() });
+});
+
 // ESG endpoints - BEFORE mounting /api routes
 app.get('/api/esg-request-status/:userId/:productId', async (req, res) => {
   try {
