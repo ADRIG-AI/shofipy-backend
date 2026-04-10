@@ -23,9 +23,10 @@ const supabase = createClient(
 );
 
 const corsOptions = {
-  origin: true, // Allow all origins for debugging
+  origin: true,
   credentials: true,
 };
+app.options("*", cors(corsOptions)); // Handle preflight for all routes
 app.use(cors(corsOptions));
 
 // Use a consistent prefix so Vercel serverless (which keeps the /api segment
