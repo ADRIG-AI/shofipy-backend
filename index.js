@@ -26,7 +26,7 @@ const corsOptions = {
   origin: true,
   credentials: true,
 };
-app.options("*", cors(corsOptions)); // Handle preflight for all routes
+app.options(/.*/, cors(corsOptions)); // Handle preflight for all routes
 app.use(cors(corsOptions));
 
 // Use a consistent prefix so Vercel serverless (which keeps the /api segment
